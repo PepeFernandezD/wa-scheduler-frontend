@@ -1,5 +1,5 @@
 const { useState, useEffect, useRef } = React;
-const BACKEND = 'https://wa-scheduler-backend-production.up.railway.app';
+const BACKEND = 'https://wa-scheduler-backend.onrender.com';
 const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/contacts.readonly';
 const PEOPLE_API = 'https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers&pageSize=200';
 const pad = n => String(n).padStart(2,'0');

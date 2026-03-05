@@ -7,7 +7,7 @@ const fmt = d => new Date(d).toLocaleString('es-ES',{day:'2-digit',month:'short'
 function countdown(ts){const d=ts-Date.now();if(d<=0)return'Enviando...';const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000),s=Math.floor((d%60000)/1000);return h>0?pad(h)+'h '+pad(m)+'m':pad(m)+'m '+pad(s)+'s';}
 
 const S={
-  page:{minHeight:'100vh',background:'#f0f2f5',display:'flex',alignItems:'center',justifyContent:'cenhter',padding:16},
+  page:{minHeight:'100vh',background:'#f0f2f5',display:'flex',alignItems:'center',justifyContent:'center',padding:16},
   card:{background:'#fff',borderRadius:24,padding:36,width:'100%',maxWidth:400,boxShadow:'0 4px 40px rgba(0,0,0,.08)',textAlign:'center'},
   logo:{width:52,height:52,borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',fontSize:24},
   input:{width:'100%',padding:'11px 14px',borderRadius:10,border:'1.5px solid #e5e7eb',fontSize:14,outline:'none',boxSizing:'border-box',fontFamily:'inherit',background:'#fafafa'},

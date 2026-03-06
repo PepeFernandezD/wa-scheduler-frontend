@@ -208,7 +208,7 @@ function App() {
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
       await fetch(BACKEND+'/schedule',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:schedAt,contactName:selContact.name})});
+        body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})});
       setShowForm(false);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');
     }catch{alert('Error al programar.');}
   }

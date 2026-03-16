@@ -316,6 +316,8 @@ function App() {
 
   useEffect(()=>{
     if(step!==3)return;
+    // Load contacts from DB on app entry
+    api('/contacts',{},token).then(d=>{ if(Array.isArray(d)) setContacts(d); });
     const sync=async()=>{try{const d=await api('/messages',{},token);setMessages(d);}catch{}};
     sync();const id=setInterval(sync,5000);return()=>clearInterval(id);
   },[step,token]);

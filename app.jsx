@@ -457,7 +457,6 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button style={{...S.btnSm,color:'#1565c0',background:'#e3f2fd'}} onClick={()=>setShowContacts(true)}>👥 Contactos</button>
           <button style={S.btnP} onClick={()=>{setShowForm(true);api('/contacts',{},token).then(d=>{if(Array.isArray(d)&&d.length>0)setContacts(d);});}}>+ Nuevo</button>
         </div>
       </header>
@@ -497,7 +496,7 @@ function App() {
           <div style={{fontSize:13,marginTop:4}}>Presiona + Nuevo para programar</div>
         </div>}
       </main>
-      {showContacts&&<ContactsModal onClose={()=>setShowContacts(false)} contacts={contacts} setContacts={setContacts} token={token} waReady={waReady}/>}
+
       {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>Nuevo mensaje</h3>
@@ -511,14 +510,7 @@ function App() {
             {filtered.length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{contacts.length===0?'Cargando contactos...':'Sin resultados'}</div>}
           </div>}
           {selContact&&<div style={S.selBadge}>✔ {selContact.name} · {selContact.phone}</div>}
-          <button style={{...S.btnSm,marginTop:4,marginBottom:8,color:'#1976d2',border:'1px dashed #90caf9',width:'100%',justifyContent:'center',background:'none'}} onClick={()=>setShowManual(v=>!v)}>
-            + Numero manual
-          </button>
-          {showManual&&<div style={{display:'flex',gap:8,marginBottom:10}}>
-            <input style={{...S.input,flex:1,margin:0}} placeholder='Nombre' value={manualName} onChange={e=>setManualName(e.target.value)}/>
-            <input style={{...S.input,flex:1,margin:0}} placeholder='+56912345678' value={manualPhone} onChange={e=>setManualPhone(e.target.value)}/>
-            <button style={{...S.btn,width:'auto',padding:'0 12px'}} onClick={()=>{if(manualName.trim()&&manualPhone.trim()){const c={id:'m-'+Date.now(),name:manualName.trim(),phone:manualPhone.trim()};setContacts(p=>[...p,c]);setSelContact(c);setSearch(c.name);setManualName('');setManualPhone('');setShowManual(false);}}}>OK</button>
-          </div>}
+
           <label style={S.label}>Mensaje</label>
           <textarea style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
           <label style={S.label}>Fecha y hora</label>

@@ -511,6 +511,14 @@ function App() {
           </div>}
           {selContact&&<div style={S.selBadge}>✔ {selContact.name} · {selContact.phone}</div>}
 
+          <button style={{...S.btnSm,marginTop:4,marginBottom:8,color:'#1976d2',border:'1px dashed #90caf9',width:'100%',justifyContent:'center',background:'none'}} onClick={()=>setShowManual(v=>!v)}>
+            + Número manual
+          </button>
+          {showManual&&<div style={{display:'flex',gap:8,marginBottom:10}}>
+            <input style={{...S.input,flex:1,margin:0}} placeholder='Nombre' value={manualName} onChange={e=>setManualName(e.target.value)}/>
+            <input style={{...S.input,flex:1,margin:0}} placeholder='+56912345678' value={manualPhone} onChange={e=>setManualPhone(e.target.value)}/>
+            <button style={{...S.btn,width:'auto',padding:'0 12px'}} onClick={()=>{if(manualName.trim()&&manualPhone.trim()){const c={id:'m-'+Date.now(),name:manualName.trim(),phone:manualPhone.trim()};setContacts(p=>[...p,c]);setSelContact(c);setSearch(c.name);setManualName('');setManualPhone('');setShowManual(false);}}}>OK</button>
+          </div>}
           <label style={S.label}>Mensaje</label>
           <textarea style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
           <label style={S.label}>Fecha y hora</label>

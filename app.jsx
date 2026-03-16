@@ -300,6 +300,110 @@ function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
 }
 
 
+
+function DateTimePicker({ value, onChange }) {
+  const [open, setOpen] = React.useState(false);
+
+  function getNow() {
+    const d = value ? new Date(value) : new Date(Date.now() + 5 * 60000);
+    return {
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+      hour: d.getHours(),
+      minute: Math.ceil(d.getMinutes() / 5) * 5 % 60
+    };
+  }
+
+  const [sel, setSel] = React.useState(getNow);
+
+  function handleOpen() {
+    setSel(getNow());
+    setOpen(true);
+  }
+
+  function commit(s) {
+    const d = new Date(s.year, s.month - 1, s.day, s.hour, s.minute);
+    if (d <= new Date()) return;
+    const pad = n => String(n).padStart(2,'0');
+    onChange(s.year+'-'+pad(s.month)+'-'+pad(s.day)+'T'+pad(s.hour)+':'+pad(s.minute));
+    setOpen(false);
+  }
+
+  function set(key, val) {
+    setSel(prev => {
+      const next = {...prev, [key]: val};
+      const maxDay = new Date(next.year, next.month, 0).getDate();
+      if (next.day > maxDay) next.day = maxDay;
+      return next;
+    });
+  }
+
+  const now = new Date();
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const years = Array.from({length:3}, (_,i) => now.getFullYear()+i);
+  const days = Array.from({length: new Date(sel.year, sel.month, 0).getDate()}, (_,i) => i+1);
+  const hours = Array.from({length:24}, (_,i) => i);
+  const minutes = Array.from({length:12}, (_,i) => i*5);
+
+  const displayVal = value ? (() => {
+    const d = new Date(value);
+    return d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear()+' '+
+      String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  })() : 'Seleccionar fecha y hora';
+
+  const selStyle = (active) => ({
+    padding:'6px 10px', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:active?700:400,
+    background:active?'#25d366':'transparent', color:active?'#fff':'inherit',
+    border:'none', display:'block', width:'100%', textAlign:'center'
+  });
+
+  const colStyle = {
+    flex:1, maxHeight:200, overflowY:'auto', borderRight:'1px solid #f0f0f0',
+    scrollbarWidth:'none'
+  };
+
+  return (
+    <div style={{position:'relative'}}>
+      <button type='button'
+        style={{...S.input, textAlign:'left', cursor:'pointer', color:value?'#222':'#aaa', background:'#fafafa', display:'flex', justifyContent:'space-between', alignItems:'center'}}
+        onClick={handleOpen}>
+        <span>{displayVal}</span>
+        <span style={{fontSize:16}}>📅</span>
+      </button>
+      {open && (
+        <div style={{position:'fixed', inset:0, zIndex:200, display:'flex'}}>
+          <div style={{flex:1, background:'rgba(0,0,0,0.3)'}} onClick={()=>setOpen(false)}/>
+          <div style={{width:280, background:'#fff', display:'flex', flexDirection:'column', boxShadow:'-4px 0 20px rgba(0,0,0,.15)', overflowY:'auto'}}>
+            <div style={{padding:'16px 16px 8px', borderBottom:'1px solid #f0f0f0'}}>
+              <div style={{fontWeight:700, fontSize:15, marginBottom:2}}>Fecha y hora</div>
+              <div style={{fontSize:12, color:'#999'}}>Selecciona cuándo enviar</div>
+            </div>
+            <div style={{display:'flex', borderBottom:'1px solid #f0f0f0', background:'#fafafa'}}>
+              {['Día','Mes','Año','H','Min'].map(h => (
+                <div key={h} style={{flex:1, fontSize:11, color:'#999', textAlign:'center', padding:'6px 0', fontWeight:600}}>{h}</div>
+              ))}
+            </div>
+            <div style={{display:'flex', flex:1}}>
+              <div style={colStyle}>{days.map(d => <button key={d} style={selStyle(sel.day===d)} onClick={()=>set('day',d)}>{d}</button>)}</div>
+              <div style={colStyle}>{months.map((m,i) => <button key={i} style={selStyle(sel.month===i+1)} onClick={()=>set('month',i+1)}>{m}</button>)}</div>
+              <div style={colStyle}>{years.map(y => <button key={y} style={selStyle(sel.year===y)} onClick={()=>set('year',y)}>{y}</button>)}</div>
+              <div style={colStyle}>{hours.map(h => <button key={h} style={selStyle(sel.hour===h)} onClick={()=>set('hour',h)}>{String(h).padStart(2,'0')}</button>)}</div>
+              <div style={{...colStyle, borderRight:'none'}}>{minutes.map(m => <button key={m} style={selStyle(sel.minute===m)} onClick={()=>set('minute',m)}>{String(m).padStart(2,'0')}</button>)}</div>
+            </div>
+            <div style={{padding:16, borderTop:'1px solid #f0f0f0'}}>
+              <div style={{fontSize:13, color:'#555', marginBottom:10, textAlign:'center'}}>
+                {sel.day} {months[sel.month-1]} {sel.year} — {String(sel.hour).padStart(2,'0')}:{String(sel.minute).padStart(2,'0')}
+              </div>
+              <button style={{...S.btn}} onClick={()=>commit(sel)}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [step, setStep] = useState(0); // 0=auth, 1=qr, 2=importar, 3=app
   const [authMode, setAuthMode] = useState('login'); // 'login'|'register'
@@ -390,7 +494,6 @@ function App() {
   const filtered=contacts.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.phone.includes(search));
   const pending=messages.filter(m=>m.status==='pending').sort((a,b)=>new Date(a.scheduledAt)-new Date(b.scheduledAt));
   const sent=messages.filter(m=>m.status==='sent'||m.status==='error');
-  const nowLocal=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
 
   // ---- PASO 0: Login / Registro ----
   if(step===0) return(
@@ -522,7 +625,7 @@ function App() {
           <label style={S.label}>Mensaje</label>
           <textarea style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
           <label style={S.label}>Fecha y hora</label>
-          <input type='datetime-local' style={S.input} min={nowLocal} value={schedAt} onChange={e=>setSchedAt(e.target.value)}/>
+          <DateTimePicker value={schedAt} onChange={setSchedAt}/>
           <div style={{display:'flex',gap:10,marginTop:12}}>
             <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>setShowForm(false)}>Cancelar</button>
             <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>Programar</button>

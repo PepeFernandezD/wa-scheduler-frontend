@@ -560,7 +560,7 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btnP} onClick={()=>{setShowForm(true);api('/contacts',{},token).then(d=>{if(Array.isArray(d)&&d.length>0)setContacts(d);});}}>+ Nuevo</button>
+          <button style={S.btnP} onClick={()=>{setShowForm(true);setRecipientTab('contacts');setSearch('');api('/contacts',{},token).then(d=>{if(Array.isArray(d)&&d.length>0)setContacts(d);});}}>+ Nuevo</button>
         </div>
       </header>
       <main style={S.main}>
@@ -603,16 +603,19 @@ function App() {
       {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>Nuevo mensaje</h3>
-          <label style={S.label}>Buscar contacto</label>
-          <input style={S.input} placeholder='Nombre o numero...' value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
+          <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
+            <button style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:recipientTab!=='groups'?'#fff':'transparent',color:recipientTab!=='groups'?'#222':'#999',boxShadow:recipientTab!=='groups'?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab('contacts');setSelContact(null);setSearch('');}}>👤 Contactos</button>
+            <button style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:recipientTab==='groups'?'#fff':'transparent',color:recipientTab==='groups'?'#222':'#999',boxShadow:recipientTab==='groups'?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab('groups');setSelContact(null);setSearch('');if(!groups.length){api('/wa-groups',{},token).then(d=>{if(Array.isArray(d))setGroups(d);});}}}>👥 Grupos</button>
+          </div>
+          <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {!selContact&&<div style={S.contactList}>
-            {filtered.slice(0,6).map(c=><div key={c.id||c.phone} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5'}} onClick={()=>{setSelContact(c);setSearch(c.name);}}>
-              <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
-              <div style={{fontSize:11,color:'#888'}}>{c.phone}</div>
+            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,8).map(c=><div key={c.phone} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8}} onClick={()=>{setSelContact(c);setSearch(c.name);}}>
+              <span style={{fontSize:14}}>{c.isGroup?'👥':'👤'}</span>
+              <div><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{c.isGroup?'Grupo':c.phone}</div></div>
             </div>)}
-            {filtered.length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{contacts.length===0?'Cargando contactos...':'Sin resultados'}</div>}
+            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())).length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&!groups.length?'Cargando grupos...':'Sin resultados'}</div>}
           </div>}
-          {selContact&&<div style={S.selBadge}>✔ {selContact.name} · {selContact.phone}</div>}
+          {selContact&&<div style={S.selBadge}>{selContact.isGroup?'👥':'✔'} {selContact.name}{!selContact.isGroup?' · '+selContact.phone:''}</div>}
 
           <button style={{...S.btnSm,marginTop:4,marginBottom:8,color:'#1976d2',border:'1px dashed #90caf9',width:'100%',justifyContent:'center',background:'none'}} onClick={()=>setShowManual(v=>!v)}>
             + Número manual

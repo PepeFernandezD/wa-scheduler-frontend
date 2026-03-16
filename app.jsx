@@ -152,8 +152,8 @@ function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
                 <div style={{fontSize:13,color:'#555',marginBottom:8}}>{waContacts.length} contactos. Selecciona o importa todos:</div>
                 <div style={{...S.contactList,maxHeight:200}}>
                   {waContacts.map((c,i)=>(
-                    <div key={i} style={{padding:'8px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:waSelected.includes(i)?'#f0fff4':'white'}} onClick={()=>setWaSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i])}>
-                      <span style={{fontSize:16}}>{waSelected.includes(i)?'✅':'⬜'}</span>
+                    <div key={i} style={{padding:'8px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:waSelected.includes(i)?'#f0fff4':'white',userSelect:'none'}} onMouseDown={(e)=>{e.preventDefault();setWaSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}}>
+                      <span style={{fontSize:16,pointerEvents:'none'}}>{waSelected.includes(i)?'✅':'⬜'}</span>
                       <div><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{c.phone}</div></div>
                     </div>
                   ))}
@@ -251,8 +251,8 @@ function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
           </div>
           <div style={{...S.contactList,maxHeight:180,marginBottom:8}}>
             {waContacts.map((c,i)=>(
-              <div key={i} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:selected.includes(i)?'#f0fff4':'white'}} onClick={()=>setSelected(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i])}>
-                <span style={{fontSize:15}}>{selected.includes(i)?'✅':'⬜'}</span>
+              <div key={i} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:selected.includes(i)?'#f0fff4':'white',userSelect:'none'}} onMouseDown={(e)=>{e.preventDefault();setSelected(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i]);}}>
+                <span style={{fontSize:15,pointerEvents:'none'}}>{selected.includes(i)?'✅':'⬜'}</span>
                 <div style={{textAlign:'left'}}>
                   <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
                   <div style={{fontSize:11,color:'#888'}}>{c.phone}</div>

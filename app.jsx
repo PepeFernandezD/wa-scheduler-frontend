@@ -330,7 +330,16 @@ function App() {
       const data = await api(endpoint, {method:'POST', body:JSON.stringify(body)});
       if (data.error) { setAuthError(data.error); setAuthLoading(false); return; }
       setToken(data.token); setUser(data.user);
-      setStep(1);
+      // Check if WA session is already active — skip QR if so
+      const status = await api('/status', {}, data.token);
+      if (status.ready) {
+        setWaReady(true);
+        const c = await api('/contacts', {}, data.token);
+        if (Array.isArray(c)) setContacts(c);
+        setStep(3); // Skip QR, go straight to app
+      } else {
+        setStep(1); // Need QR
+      }
     } catch(e) { setAuthError('Error de conexión'); }
     setAuthLoading(false);
   }

@@ -199,79 +199,99 @@ function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
 
 function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
   const [waContacts, setWaContacts] = React.useState([]);
-  const [selected, setSelected] = React.useState([]);
+  const [search, setSearch] = React.useState('');
+  const [selected, setSelected] = React.useState(new Set());
   const [loading, setLoading] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
   const [msg, setMsg] = React.useState('');
   const [imported, setImported] = React.useState(false);
+
+  const filtered = React.useMemo(() =>
+    search.trim()
+      ? waContacts.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search))
+      : waContacts,
+    [waContacts, search]
+  );
 
   async function loadWa() {
     setLoading(true); setMsg('');
     try {
       const data = await api('/wa-contacts', {}, token);
       if (data.error) { setMsg('❌ '+data.error); setLoading(false); return; }
-      if (!Array.isArray(data) || data.length===0) { setMsg('⚠️ No se encontraron contactos en WhatsApp'); setLoading(false); return; }
+      if (!Array.isArray(data) || data.length===0) { setMsg('⚠️ No se encontraron contactos'); setLoading(false); return; }
       setWaContacts(data);
-      setSelected(data.map((_,i)=>i)); // select all by default
+      setSelected(new Set(data.map((_,i)=>i)));
       setMsg('');
     } catch(e) { setMsg('❌ '+e.message); }
     setLoading(false);
   }
 
-  async function doImport() {
-    const toImport = selected.length>0 ? waContacts.filter((_,i)=>selected.includes(i)) : waContacts;
-    if (!toImport.length) return;
-    setLoading(true);
-    try {
-      const res = await api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:toImport.map(c=>({...c,source:'whatsapp'}))})},token);
-      if (res.error) { setMsg('❌ '+res.error); setLoading(false); return; }
-      const fresh = await api('/contacts',{},token);
-      if (!fresh.error) setContacts(fresh);
-      setImported(true);
-      setMsg('✅ '+(res.inserted||toImport.length)+' contactos importados');
-    } catch(e) { setMsg('❌ '+e.message); }
-    setLoading(false);
+  function toggleOne(i) {
+    setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; });
   }
 
   function toggleAll() {
-    setSelected(selected.length===waContacts.length ? [] : waContacts.map((_,i)=>i));
+    setSelected(selected.size === waContacts.length ? new Set() : new Set(waContacts.map((_,i)=>i)));
+  }
+
+  async function doImport() {
+    const toImport = waContacts.filter((_,i) => selected.has(i));
+    if (!toImport.length) return;
+    setImporting(true);
+    try {
+      const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts: toImport.map(c=>({...c, source:'whatsapp'}))})}, token);
+      if (res.error) { setMsg('❌ '+res.error); setImporting(false); return; }
+      const fresh = await api('/contacts', {}, token);
+      if (Array.isArray(fresh)) setContacts(fresh);
+      setImported(true);
+      setMsg('✅ '+(res.inserted||toImport.length)+' contactos importados');
+    } catch(e) { setMsg('❌ '+e.message); }
+    setImporting(false);
   }
 
   return (
-    <div style={{marginTop:16}}>
+    <div style={{marginTop:16,width:'100%'}}>
       {waContacts.length===0 && !imported && (
-        <button style={{...S.btn,background:'#e8f5e9',color:'#1b5e20',border:'1.5px solid #a5d6a7',opacity:loading?0.5:1}} disabled={loading} onClick={loadWa}>
-          {loading?'⏳ Cargando contactos...':'📱 Importar desde WhatsApp'}
+        <button style={{...S.btn, background:'#e8f5e9', color:'#1b5e20', border:'1.5px solid #a5d6a7', opacity:loading?0.5:1}} disabled={loading} onClick={loadWa}>
+          {loading ? '⏳ Cargando contactos...' : '📱 Importar desde WhatsApp'}
         </button>
       )}
       {waContacts.length>0 && !imported && (
         <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-            <span style={{fontSize:13,color:'#555',fontWeight:600}}>{waContacts.length} contactos</span>
-            <button style={{...S.btnSm,fontSize:11}} onClick={toggleAll}>{selected.length===waContacts.length?'Deseleccionar todos':'Seleccionar todos'}</button>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+            <span style={{fontSize:13, color:'#555', fontWeight:600}}>{selected.size}/{waContacts.length} seleccionados</span>
+            <button style={{...S.btnSm, fontSize:11}} onClick={toggleAll}>{selected.size===waContacts.length?'Quitar todos':'Seleccionar todos'}</button>
           </div>
-          <div style={{...S.contactList,maxHeight:180,marginBottom:8}}>
-            {waContacts.map((c,i)=>(
-              <div key={i} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:selected.includes(i)?'#f0fff4':'white',userSelect:'none'}} onMouseDown={(e)=>{e.preventDefault();setSelected(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i]);}}>
-                <span style={{fontSize:15,pointerEvents:'none'}}>{selected.includes(i)?'✅':'⬜'}</span>
-                <div style={{textAlign:'left'}}>
-                  <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
-                  <div style={{fontSize:11,color:'#888'}}>{c.phone}</div>
+          <input style={{...S.input, marginBottom:8}} placeholder={'🔍 Buscar en '+waContacts.length+' contactos...'} value={search} onChange={e=>setSearch(e.target.value)}/>
+          <div style={{background:'#fff', border:'1.5px solid #eee', borderRadius:10, maxHeight:220, overflowY:'auto', marginBottom:8}}>
+            {filtered.length===0 && <div style={{padding:'12px', fontSize:13, color:'#aaa', textAlign:'center'}}>Sin resultados para "{search}"</div>}
+            {filtered.map((c) => {
+              const realIdx = waContacts.indexOf(c);
+              const isSel = selected.has(realIdx);
+              return (
+                <div key={realIdx} style={{padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f5f5f5', display:'flex', alignItems:'center', gap:8, background:isSel?'#f0fff4':'white', userSelect:'none'}} onMouseDown={e=>{e.preventDefault(); toggleOne(realIdx);}}>
+                  <span style={{fontSize:14, pointerEvents:'none', minWidth:18}}>{isSel?'✅':'⬜'}</span>
+                  <div style={{textAlign:'left', pointerEvents:'none'}}>
+                    <div style={{fontWeight:500, fontSize:13}}>{c.name}</div>
+                    <div style={{fontSize:11, color:'#888'}}>{c.phone}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <button style={{...S.btn,opacity:loading||selected.length===0?0.4:1}} disabled={loading||selected.length===0} onClick={doImport}>
-            {loading?'⏳ Importando...':(`⬇️ Importar ${selected.length} contacto${selected.length!==1?'s':''}`)}
+          <button style={{...S.btn, opacity:(importing||selected.size===0)?0.4:1}} disabled={importing||selected.size===0} onClick={doImport}>
+            {importing ? '⏳ Importando...' : `⬇️ Importar ${selected.size} contacto${selected.size!==1?'s':''}`}
           </button>
         </div>
       )}
-      {msg && <div style={{marginTop:10,padding:'9px 12px',background:msg.startsWith('✅')?'#f0fff4':'#fff3f3',borderRadius:8,fontSize:13,color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
-      <button style={{...S.btn,background:'#f5f5f5',color:'#555',marginTop:12}} onClick={onDone}>
-        {contacts.length>0?`Continuar (${contacts.length} contactos) →`:'Continuar sin contactos →'}
+      {msg && <div style={{marginTop:10, padding:'9px 12px', background:msg.startsWith('✅')?'#f0fff4':'#fff3f3', borderRadius:8, fontSize:13, color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
+      <button style={{...S.btn, background:'#f5f5f5', color:'#555', marginTop:12}} onClick={onDone}>
+        {contacts.length>0 ? `Continuar (${contacts.length} contactos) →` : 'Continuar sin contactos →'}
       </button>
     </div>
   );
 }
+
 
 function App() {
   const [step, setStep] = useState(0); // 0=auth, 1=qr, 2=importar, 3=app

@@ -56,9 +56,10 @@ function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
     try {
       const data = await api('/wa-contacts', {}, token);
       if (data.error) { setMsg('❌ '+data.error); setLoading(false); return; }
+      if (!Array.isArray(data)) { setMsg('❌ Respuesta inesperada del servidor'); setLoading(false); return; }
       setWaContacts(data);
-      setMsg('✅ '+data.length+' contactos encontrados');
-    } catch { setMsg('❌ Error al cargar'); }
+      setMsg(data.length > 0 ? '✅ '+data.length+' contactos encontrados' : '⚠️ No se encontraron contactos');
+    } catch(e) { setMsg('❌ Error al cargar: '+e.message); }
     setLoading(false);
   }
 
@@ -68,10 +69,11 @@ function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
     setLoading(true);
     try {
       const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts:toImport.map(c=>({...c,source:'whatsapp'}))})}, token);
+      if (res.error) { setMsg('❌ '+res.error); setLoading(false); return; }
       const fresh = await api('/contacts', {}, token);
-      setContacts(fresh);
-      setMsg('✅ '+res.inserted+' contactos importados');
-    } catch { setMsg('❌ Error al importar'); }
+      if (!fresh.error) setContacts(fresh);
+      setMsg('✅ '+(res.inserted||toImport.length)+' contactos importados de WhatsApp');
+    } catch(e) { setMsg('❌ Error al importar: '+e.message); }
     setLoading(false);
   }
 
@@ -188,6 +190,82 @@ function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
         {msg && <div style={{marginTop:12,padding:'10px 14px',background:'#f0fff4',borderRadius:10,fontSize:13,color:'#1b5e20'}}>{msg}</div>}
         <div style={{marginTop:16,fontSize:12,color:'#aaa',textAlign:'center'}}>{contacts.length} contacto{contacts.length!==1?'s':''} en total</div>
       </div>
+    </div>
+  );
+}
+
+function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
+  const [waContacts, setWaContacts] = React.useState([]);
+  const [selected, setSelected] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+  const [imported, setImported] = React.useState(false);
+
+  async function loadWa() {
+    setLoading(true); setMsg('');
+    try {
+      const data = await api('/wa-contacts', {}, token);
+      if (data.error) { setMsg('❌ '+data.error); setLoading(false); return; }
+      if (!Array.isArray(data) || data.length===0) { setMsg('⚠️ No se encontraron contactos en WhatsApp'); setLoading(false); return; }
+      setWaContacts(data);
+      setSelected(data.map((_,i)=>i)); // select all by default
+      setMsg('');
+    } catch(e) { setMsg('❌ '+e.message); }
+    setLoading(false);
+  }
+
+  async function doImport() {
+    const toImport = selected.length>0 ? waContacts.filter((_,i)=>selected.includes(i)) : waContacts;
+    if (!toImport.length) return;
+    setLoading(true);
+    try {
+      const res = await api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:toImport.map(c=>({...c,source:'whatsapp'}))})},token);
+      if (res.error) { setMsg('❌ '+res.error); setLoading(false); return; }
+      const fresh = await api('/contacts',{},token);
+      if (!fresh.error) setContacts(fresh);
+      setImported(true);
+      setMsg('✅ '+(res.inserted||toImport.length)+' contactos importados');
+    } catch(e) { setMsg('❌ '+e.message); }
+    setLoading(false);
+  }
+
+  function toggleAll() {
+    setSelected(selected.length===waContacts.length ? [] : waContacts.map((_,i)=>i));
+  }
+
+  return (
+    <div style={{marginTop:16}}>
+      {waContacts.length===0 && !imported && (
+        <button style={{...S.btn,background:'#e8f5e9',color:'#1b5e20',border:'1.5px solid #a5d6a7',opacity:loading?0.5:1}} disabled={loading} onClick={loadWa}>
+          {loading?'⏳ Cargando contactos...':'📱 Importar desde WhatsApp'}
+        </button>
+      )}
+      {waContacts.length>0 && !imported && (
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+            <span style={{fontSize:13,color:'#555',fontWeight:600}}>{waContacts.length} contactos</span>
+            <button style={{...S.btnSm,fontSize:11}} onClick={toggleAll}>{selected.length===waContacts.length?'Deseleccionar todos':'Seleccionar todos'}</button>
+          </div>
+          <div style={{...S.contactList,maxHeight:180,marginBottom:8}}>
+            {waContacts.map((c,i)=>(
+              <div key={i} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:selected.includes(i)?'#f0fff4':'white'}} onClick={()=>setSelected(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i])}>
+                <span style={{fontSize:15}}>{selected.includes(i)?'✅':'⬜'}</span>
+                <div style={{textAlign:'left'}}>
+                  <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
+                  <div style={{fontSize:11,color:'#888'}}>{c.phone}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button style={{...S.btn,opacity:loading||selected.length===0?0.4:1}} disabled={loading||selected.length===0} onClick={doImport}>
+            {loading?'⏳ Importando...':(`⬇️ Importar ${selected.length} contacto${selected.length!==1?'s':''}`)}
+          </button>
+        </div>
+      )}
+      {msg && <div style={{marginTop:10,padding:'9px 12px',background:msg.startsWith('✅')?'#f0fff4':'#fff3f3',borderRadius:8,fontSize:13,color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
+      <button style={{...S.btn,background:'#f5f5f5',color:'#555',marginTop:12}} onClick={onDone}>
+        {contacts.length>0?`Continuar (${contacts.length} contactos) →`:'Continuar sin contactos →'}
+      </button>
     </div>
   );
 }
@@ -313,21 +391,13 @@ function App() {
     </div></div>
   );
 
-  // ---- PASO 2: Importar ----
+  // ---- PASO 2: Importar desde WA ----
   if(step===2) return(
     <div style={S.page}><div style={{...S.card,maxWidth:460}}>
       <div style={{...S.logo,background:'#e8f5e9',color:'#25d366'}}>✅</div>
       <h2 style={{margin:0,fontSize:22,fontWeight:700}}>WhatsApp conectado!</h2>
-      <p style={{margin:'8px 0 0',color:'#888',fontSize:14}}>Importa tus contactos (opcional)</p>
-      <p style={{fontSize:12,color:'#aaa',margin:'4px 0 0'}}>Tambien puedes hacerlo despues desde la app</p>
-      {showContacts&&<ContactsModal onClose={()=>setShowContacts(false)} contacts={contacts} setContacts={setContacts} token={token} waReady={waReady}/>}
-      <button style={{...S.btn,background:'#f0f7ff',color:'#1565c0',marginTop:20,border:'1.5px solid #bbdefb'}} onClick={()=>setShowContacts(true)}>
-        👥 Importar contactos
-      </button>
-      {contacts.length>0&&<div style={{...S.selBadge,marginTop:12,textAlign:'center'}}>✔ {contacts.length} contacto{contacts.length!==1?'s':''} importado{contacts.length!==1?'s':''}</div>}
-      <button style={{...S.btn,marginTop:12}} onClick={()=>setStep(3)}>
-        {contacts.length>0?'Ir a la app ✓':'Continuar sin contactos →'}
-      </button>
+      <p style={{margin:'8px 0 4px',color:'#888',fontSize:14}}>Hola {user?.name} — importa tus contactos</p>
+      <OnboardingWaImport token={token} waReady={waReady} contacts={contacts} setContacts={setContacts} onDone={()=>setStep(3)}/>
       <Dots active={2}/>
     </div></div>
   );

@@ -2,11 +2,11 @@ const { useState, useEffect, useRef } = React;
 const BACKEND = 'https://wa-scheduler-backend-1.onrender.com';
 const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/contacts.readonly';
 const PEOPLE_API = 'https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,emailAddresses&pageSize=500';
-// Client ID de la app - configurado para wa-scheduler
-const GOOGLE_CLIENT_ID = ''; // se llena desde el backend o configuracion
+
 const pad = n => String(n).padStart(2,'0');
 const fmt = d => new Date(d).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
 function countdown(ts){const d=ts-Date.now();if(d<=0)return'Enviando...';const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000),s=Math.floor((d%60000)/1000);return h>0?pad(h)+'h '+pad(m)+'m':pad(m)+'m '+pad(s)+'s';}
+
 const S={
   page:{minHeight:'100vh',background:'#f0f2f5',display:'flex',alignItems:'center',justifyContent:'center',padding:16},
   card:{background:'#fff',borderRadius:24,padding:36,width:'100%',maxWidth:400,boxShadow:'0 4px 40px rgba(0,0,0,.08)',textAlign:'center'},
@@ -34,72 +34,91 @@ const S={
 function Dots({active}){return(<div style={{display:'flex',gap:6,justifyContent:'center',marginTop:24}}>{[0,1,2].map(i=><span key={i} style={{width:8,height:8,borderRadius:4,background:i===active?'#25d366':'#e0e0e0'}}/>)}</div>);}
 function WaIcon(){return(<svg width='22' height='22' viewBox='0 0 24 24' fill='currentColor'><path d='M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z'/></svg>);}
 
-// Modal para importar contactos (accesible desde cualquier pantalla)
-function ContactsModal({onClose, contacts, setContacts}) {
-  const [tab, setTab] = useState('google'); // 'google' | 'manual' | 'email'
+function api(path, opts={}, token) {
+  return fetch(BACKEND+path, {
+    ...opts,
+    headers: { 'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token} : {}), ...(opts.headers||{}) }
+  }).then(r => r.json());
+}
+
+function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
+  const [tab, setTab] = useState('whatsapp');
   const [clientId, setClientId] = useState('');
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
-  const [emailInput, setEmailInput] = useState('');
-  const [emailName, setEmailName] = useState('');
-  const [emailPhone, setEmailPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
+  const [waContacts, setWaContacts] = useState([]);
+  const [waSelected, setWaSelected] = useState([]);
+
+  async function loadWaContacts() {
+    setLoading(true); setMsg('');
+    try {
+      const data = await api('/wa-contacts', {}, token);
+      if (data.error) { setMsg('❌ '+data.error); setLoading(false); return; }
+      setWaContacts(data);
+      setMsg('✅ '+data.length+' contactos encontrados');
+    } catch { setMsg('❌ Error al cargar'); }
+    setLoading(false);
+  }
+
+  async function importWaSelected() {
+    const toImport = waSelected.length > 0 ? waContacts.filter((_,i)=>waSelected.includes(i)) : waContacts;
+    if (!toImport.length) return;
+    setLoading(true);
+    try {
+      const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts:toImport.map(c=>({...c,source:'whatsapp'}))})}, token);
+      const fresh = await api('/contacts', {}, token);
+      setContacts(fresh);
+      setMsg('✅ '+res.inserted+' contactos importados');
+    } catch { setMsg('❌ Error al importar'); }
+    setLoading(false);
+  }
 
   function startGoogle() {
     if (!clientId.trim()) return;
     const p = new URLSearchParams({client_id:clientId.trim(), redirect_uri:'about:blank', response_type:'token', scope:GOOGLE_SCOPES});
-    const popup = window.open('https://accounts.google.com/o/oauth2/v2/auth?'+p, 'gauth', 'width=500,height=600');
+    const popup = window.open('https://accounts.google.com/o/oauth2/v2/auth?'+p,'gauth','width=500,height=600');
     setLoading(true);
-    const poll = setInterval(() => {
+    const poll = setInterval(()=>{
       try {
-        if (popup.closed) { clearInterval(poll); setLoading(false); return; }
-        const hash = popup.location.hash;
-        if (hash?.includes('access_token')) {
-          const tk = new URLSearchParams(hash.slice(1)).get('access_token');
+        if(popup.closed){clearInterval(poll);setLoading(false);return;}
+        const hash=popup.location.hash;
+        if(hash?.includes('access_token')){
+          const tk=new URLSearchParams(hash.slice(1)).get('access_token');
           popup.close(); clearInterval(poll);
           fetchGoogle(tk);
         }
       } catch {}
-    }, 500);
+    },500);
   }
 
   async function fetchGoogle(tkn) {
     try {
-      const r = await fetch(PEOPLE_API, {headers:{Authorization:'Bearer '+tkn}});
+      const r = await fetch(PEOPLE_API,{headers:{Authorization:'Bearer '+tkn}});
       const d = await r.json();
-      const c = (d.connections||[]).map(x=>({
-        id: x.resourceName,
-        name: x.names?.[0]?.displayName||'Sin nombre',
-        phone: x.phoneNumbers?.[0]?.value||'',
-        email: x.emailAddresses?.[0]?.value||''
-      })).filter(x=>x.phone);
-      setContacts(prev=>{const ex=new Set(prev.map(x=>x.id));return[...prev,...c.filter(x=>!ex.has(x.id))];});
-      setMsg('✅ '+c.length+' contactos importados');
-      setLoading(false);
-    } catch { setMsg('❌ Error al obtener contactos.'); setLoading(false); }
+      const c = (d.connections||[]).map(x=>({name:x.names?.[0]?.displayName||'Sin nombre',phone:x.phoneNumbers?.[0]?.value||'',email:x.emailAddresses?.[0]?.value||''})).filter(x=>x.phone);
+      if (c.length) {
+        await api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:c.map(x=>({...x,source:'google'}))})},token);
+        const fresh = await api('/contacts',{},token);
+        setContacts(fresh);
+        setMsg('✅ '+c.length+' contactos de Google importados');
+      }
+    } catch { setMsg('❌ Error al importar de Google'); }
+    setLoading(false);
   }
 
-  function addManual() {
+  async function addManual() {
     if (!manualName.trim()||!manualPhone.trim()) return;
-    setContacts(p=>[...p,{id:'m-'+Date.now(),name:manualName.trim(),phone:manualPhone.trim()}]);
-    setMsg('✅ Contacto agregado: '+manualName.trim());
-    setManualName(''); setManualPhone('');
+    const data = await api('/contacts',{method:'POST',body:JSON.stringify({name:manualName.trim(),phone:manualPhone.trim()})},token);
+    if (!data.error) {
+      setContacts(p=>[...p.filter(c=>c.phone!==data.phone),data]);
+      setMsg('✅ Contacto agregado: '+manualName.trim());
+      setManualName(''); setManualPhone('');
+    } else setMsg('❌ '+data.error);
   }
 
-  function addByEmail() {
-    if (!emailInput.trim()||!emailName.trim()||!emailPhone.trim()) return;
-    setContacts(p=>[...p,{id:'e-'+Date.now(),name:emailName.trim(),phone:emailPhone.trim(),email:emailInput.trim()}]);
-    setMsg('✅ Contacto agregado: '+emailName.trim());
-    setEmailInput(''); setEmailName(''); setEmailPhone('');
-  }
-
-  const tabStyle = (t) => ({
-    flex:1, padding:'8px 4px', border:'none', cursor:'pointer', fontWeight:600, fontSize:13,
-    background: tab===t ? '#fff' : 'transparent',
-    color: tab===t ? '#25d366' : '#999',
-    borderBottom: tab===t ? '2px solid #25d366' : '2px solid transparent',
-  });
+  const tabStyle = t => ({flex:1,padding:'8px 4px',border:'none',cursor:'pointer',fontWeight:600,fontSize:13,background:tab===t?'#fff':'transparent',color:tab===t?'#25d366':'#999',borderBottom:tab===t?'2px solid #25d366':'2px solid transparent'});
 
   return (
     <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -108,43 +127,51 @@ function ContactsModal({onClose, contacts, setContacts}) {
           <h3 style={{margin:0,fontSize:17}}>👥 Importar contactos</h3>
           <button style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'#aaa'}} onClick={onClose}>×</button>
         </div>
-
-        {/* Tabs */}
         <div style={{display:'flex',borderBottom:'2px solid #f0f0f0',marginBottom:16}}>
+          <button style={tabStyle('whatsapp')} onClick={()=>setTab('whatsapp')}>WhatsApp</button>
           <button style={tabStyle('google')} onClick={()=>setTab('google')}>Google</button>
-          <button style={tabStyle('email')} onClick={()=>setTab('email')}>Por correo</button>
           <button style={tabStyle('manual')} onClick={()=>setTab('manual')}>Manual</button>
         </div>
 
-        {/* Google tab */}
+        {tab==='whatsapp' && (
+          <div>
+            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Importa tus contactos directamente desde WhatsApp conectado.</p>
+            {!waReady && <div style={{padding:'10px 14px',background:'#fff3cd',borderRadius:8,fontSize:13,color:'#856404',marginBottom:12}}>⚠️ Primero conecta tu WhatsApp</div>}
+            {waReady && waContacts.length===0 && (
+              <button style={{...S.btn,opacity:loading?0.5:1}} disabled={loading} onClick={loadWaContacts}>
+                {loading?'⏳ Cargando...':'📱 Cargar contactos de WhatsApp'}
+              </button>
+            )}
+            {waContacts.length>0 && (
+              <div>
+                <div style={{fontSize:13,color:'#555',marginBottom:8}}>{waContacts.length} contactos. Selecciona o importa todos:</div>
+                <div style={{...S.contactList,maxHeight:200}}>
+                  {waContacts.map((c,i)=>(
+                    <div key={i} style={{padding:'8px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:waSelected.includes(i)?'#f0fff4':'white'}} onClick={()=>setWaSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i])}>
+                      <span style={{fontSize:16}}>{waSelected.includes(i)?'✅':'⬜'}</span>
+                      <div><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{c.phone}</div></div>
+                    </div>
+                  ))}
+                </div>
+                <button style={{...S.btn,marginTop:12,opacity:loading?0.5:1}} disabled={loading} onClick={importWaSelected}>
+                  {loading?'⏳ Importando...':'⬇️ Importar '+(waSelected.length>0?waSelected.length+' seleccionados':'todos')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {tab==='google' && (
           <div>
-            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Conecta Google Contacts con tu cuenta. Necesitas el Client ID de Google Cloud Console.</p>
+            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Conecta Google Contacts. Necesitas el Client ID de Google Cloud Console.</p>
             <label style={S.label}>Google Client ID</label>
             <input style={S.input} placeholder='xxxxx.apps.googleusercontent.com' value={clientId} onChange={e=>setClientId(e.target.value)}/>
             <button style={{...S.btn,marginTop:12,opacity:clientId.trim()&&!loading?1:0.4}} disabled={!clientId.trim()||loading} onClick={startGoogle}>
-              {loading ? '⏳ Conectando...' : '🔗 Conectar Google Contacts'}
+              {loading?'⏳ Conectando...':'🔗 Conectar Google Contacts'}
             </button>
           </div>
         )}
 
-        {/* Por correo tab */}
-        {tab==='email' && (
-          <div>
-            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Agrega un contacto usando su correo electrónico.</p>
-            <label style={S.label}>Correo electrónico</label>
-            <input style={S.input} type='email' placeholder='contacto@gmail.com' value={emailInput} onChange={e=>setEmailInput(e.target.value)}/>
-            <label style={S.label}>Nombre</label>
-            <input style={S.input} placeholder='Nombre del contacto' value={emailName} onChange={e=>setEmailName(e.target.value)}/>
-            <label style={S.label}>Número WhatsApp</label>
-            <input style={S.input} placeholder='+56912345678' value={emailPhone} onChange={e=>setEmailPhone(e.target.value)}/>
-            <button style={{...S.btn,marginTop:12,opacity:(emailInput&&emailName&&emailPhone)?1:0.4}} disabled={!emailInput||!emailName||!emailPhone} onClick={addByEmail}>
-              ➕ Agregar contacto
-            </button>
-          </div>
-        )}
-
-        {/* Manual tab */}
         {tab==='manual' && (
           <div>
             <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Agrega un contacto con nombre y número.</p>
@@ -166,77 +193,112 @@ function ContactsModal({onClose, contacts, setContacts}) {
 }
 
 function App() {
-  const [step,setStep]=useState(0);
-  const [userName,setUserName]=useState('');
-  const [qr,setQr]=useState(null);
-  const [waReady,setWaReady]=useState(false);
-  const [contacts,setContacts]=useState([]);
-  const [messages,setMessages]=useState([]);
-  const [showForm,setShowForm]=useState(false);
-  const [showContacts,setShowContacts]=useState(false);
-  const [tick,setTick]=useState(0);
-  const [selContact,setSelContact]=useState(null);
-  const [msgText,setMsgText]=useState('');
-  const [schedAt,setSchedAt]=useState('');
-  const [search,setSearch]=useState('');
-  const [manualName,setManualName]=useState('');
-  const [manualPhone,setManualPhone]=useState('');
-  const [showManual,setShowManual]=useState(false);
-  const pollRef=useRef(null);
+  const [step, setStep] = useState(0); // 0=auth, 1=qr, 2=importar, 3=app
+  const [authMode, setAuthMode] = useState('login'); // 'login'|'register'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
+  const [qr, setQr] = useState(null);
+  const [waReady, setWaReady] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [selContact, setSelContact] = useState(null);
+  const [msgText, setMsgText] = useState('');
+  const [schedAt, setSchedAt] = useState('');
+  const [search, setSearch] = useState('');
+  const [manualName, setManualName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [showManual, setShowManual] = useState(false);
+  const pollRef = useRef(null);
 
   useEffect(()=>{const id=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(id);},[]);
 
   useEffect(()=>{
     if(step!==1)return;
     pollRef.current=setInterval(async()=>{
-      try{const r=await fetch(BACKEND+'/status');const d=await r.json();
-        if(d.ready){setWaReady(true);setQr(null);clearInterval(pollRef.current);setStep(2);}
-        else if(d.qr)setQr(d.qr);
+      try{
+        const d=await api('/status',{},token);
+        if(d.ready){setWaReady(true);setQr(null);clearInterval(pollRef.current);
+          const c=await api('/contacts',{},token);setContacts(c);setStep(2);}
+        else if(d.qr) setQr(d.qr);
       }catch{}
     },2000);
     return()=>clearInterval(pollRef.current);
-  },[step]);
+  },[step,token]);
 
   useEffect(()=>{
     if(step!==3)return;
-    const sync=async()=>{try{const r=await fetch(BACKEND+'/messages');const d=await r.json();setMessages(d);}catch{}};
+    const sync=async()=>{try{const d=await api('/messages',{},token);setMessages(d);}catch{}};
     sync();const id=setInterval(sync,5000);return()=>clearInterval(id);
-  },[step]);
+  },[step,token]);
+
+  async function handleAuth() {
+    setAuthError(''); setAuthLoading(true);
+    try {
+      const endpoint = authMode==='login' ? '/auth/login' : '/auth/register';
+      const body = authMode==='login' ? {email,password} : {email,password,name};
+      const data = await api(endpoint, {method:'POST', body:JSON.stringify(body)});
+      if (data.error) { setAuthError(data.error); setAuthLoading(false); return; }
+      setToken(data.token); setUser(data.user);
+      setStep(1);
+    } catch(e) { setAuthError('Error de conexión'); }
+    setAuthLoading(false);
+  }
 
   async function scheduleMsg(){
     if(!selContact||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
-      await fetch(BACKEND+'/schedule',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})});
+      await api('/schedule',{method:'POST',body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})},token);
       setShowForm(false);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');
     }catch{alert('Error al programar.');}
   }
 
-  async function deleteMsg(id){try{await fetch(BACKEND+'/messages/'+id,{method:'DELETE'});}catch{}setMessages(p=>p.filter(m=>m.id!==id));}
+  async function deleteMsg(id){
+    try{await api('/messages/'+id,{method:'DELETE'},token);}catch{}
+    setMessages(p=>p.filter(m=>m.id!==id));
+  }
 
   const filtered=contacts.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.phone.includes(search));
   const pending=messages.filter(m=>m.status==='pending').sort((a,b)=>new Date(a.scheduledAt)-new Date(b.scheduledAt));
   const sent=messages.filter(m=>m.status==='sent'||m.status==='error');
   const nowLocal=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
 
-  if(step===0)return(
+  // ---- PASO 0: Login / Registro ----
+  if(step===0) return(
     <div style={S.page}><div style={S.card}>
       <div style={{...S.logo,background:'#e8f5e9',color:'#25d366'}}><WaIcon/></div>
       <h1 style={{margin:0,fontSize:26,fontWeight:800}}>WA Scheduler</h1>
-      <p style={{margin:'8px 0 0',color:'#888',fontSize:14}}>Programa mensajes con envio automatico</p>
-      <label style={S.label}>Tu nombre</label>
-      <input style={S.input} placeholder='Ej: Rodrigo' value={userName} onChange={e=>setUserName(e.target.value)}/>
-      <button style={{...S.btn,marginTop:20,opacity:userName.trim()?1:0.4}} disabled={!userName.trim()} onClick={()=>setStep(1)}>Continuar</button>
-      <Dots active={0}/>
+      <p style={{margin:'8px 0 20px',color:'#888',fontSize:14}}>Programa mensajes con envio automatico</p>
+      <div style={{display:'flex',background:'#f5f5f5',borderRadius:10,padding:3,marginBottom:16}}>
+        <button style={{flex:1,padding:'8px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:authMode==='login'?'#fff':'transparent',color:authMode==='login'?'#222':'#999',boxShadow:authMode==='login'?'0 1px 4px rgba(0,0,0,.1)':'none'}} onClick={()=>{setAuthMode('login');setAuthError('');}}>Entrar</button>
+        <button style={{flex:1,padding:'8px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:authMode==='register'?'#fff':'transparent',color:authMode==='register'?'#222':'#999',boxShadow:authMode==='register'?'0 1px 4px rgba(0,0,0,.1)':'none'}} onClick={()=>{setAuthMode('register');setAuthError('');}}>Crear cuenta</button>
+      </div>
+      {authMode==='register'&&<><label style={S.label}>Tu nombre</label><input style={S.input} placeholder='Ej: Rodrigo' value={name} onChange={e=>setName(e.target.value)}/></>}
+      <label style={S.label}>Email</label>
+      <input style={S.input} type='email' placeholder='tu@email.com' value={email} onChange={e=>setEmail(e.target.value)}/>
+      <label style={S.label}>Contraseña</label>
+      <input style={S.input} type='password' placeholder='••••••••' value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleAuth()}/>
+      {authError&&<div style={{marginTop:10,padding:'8px 12px',background:'#fff0f0',borderRadius:8,fontSize:13,color:'#c00'}}>{authError}</div>}
+      <button style={{...S.btn,marginTop:20,opacity:(email&&password&&(authMode==='login'||name))&&!authLoading?1:0.4}} disabled={!email||!password||(authMode==='register'&&!name)||authLoading} onClick={handleAuth}>
+        {authLoading?'⏳ Cargando...':(authMode==='login'?'Entrar':'Crear cuenta')}
+      </button>
     </div></div>
   );
 
-  if(step===1)return(
+  // ---- PASO 1: QR ----
+  if(step===1) return(
     <div style={S.page}><div style={S.card}>
       <div style={{...S.logo,background:'#e3f2fd',color:'#1565c0'}}>📱</div>
       <h2 style={{margin:0,fontSize:22,fontWeight:700}}>Conectar WhatsApp</h2>
-      <p style={{margin:'8px 0 0',color:'#888',fontSize:14}}>Escanea el QR con tu celular</p>
+      <p style={{margin:'8px 0 0',color:'#888',fontSize:14}}>Hola {user?.name} — escanea el QR con tu celular</p>
       <div style={S.qrBox}>
         {qr?<img src={qr} alt='QR' style={{width:200,height:200,borderRadius:8}}/>
           :<div style={{textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>⏳</div><div style={{fontSize:13,color:'#888'}}>Generando QR...</div></div>}
@@ -246,18 +308,19 @@ function App() {
         <p style={{fontSize:13,color:'#555',textAlign:'center',margin:'0 0 4px'}}>2. Menu - Dispositivos vinculados</p>
         <p style={{fontSize:13,color:'#555',textAlign:'center'}}>3. Escanea este codigo</p>
       </div>}
-      <button style={{...S.btn,background:'#f5f5f5',color:'#888',marginTop:16,fontSize:13}} onClick={()=>setStep(0)}>Volver</button>
+      <button style={{...S.btn,background:'#f5f5f5',color:'#888',marginTop:16,fontSize:13}} onClick={()=>setStep(0)}>Cerrar sesion</button>
       <Dots active={1}/>
     </div></div>
   );
 
-  if(step===2)return(
+  // ---- PASO 2: Importar ----
+  if(step===2) return(
     <div style={S.page}><div style={{...S.card,maxWidth:460}}>
       <div style={{...S.logo,background:'#e8f5e9',color:'#25d366'}}>✅</div>
       <h2 style={{margin:0,fontSize:22,fontWeight:700}}>WhatsApp conectado!</h2>
       <p style={{margin:'8px 0 0',color:'#888',fontSize:14}}>Importa tus contactos (opcional)</p>
       <p style={{fontSize:12,color:'#aaa',margin:'4px 0 0'}}>Tambien puedes hacerlo despues desde la app</p>
-      {showContacts && <ContactsModal onClose={()=>setShowContacts(false)} contacts={contacts} setContacts={setContacts}/>}
+      {showContacts&&<ContactsModal onClose={()=>setShowContacts(false)} contacts={contacts} setContacts={setContacts} token={token} waReady={waReady}/>}
       <button style={{...S.btn,background:'#f0f7ff',color:'#1565c0',marginTop:20,border:'1.5px solid #bbdefb'}} onClick={()=>setShowContacts(true)}>
         👥 Importar contactos
       </button>
@@ -269,6 +332,7 @@ function App() {
     </div></div>
   );
 
+  // ---- PASO 3: App Principal ----
   return(
     <div style={S.app}>
       <header style={S.header}>
@@ -276,7 +340,7 @@ function App() {
           <div style={{...S.logo,width:34,height:34,borderRadius:10,color:'#25d366',background:'#e8f5e9',margin:0}}><WaIcon/></div>
           <div>
             <div style={{fontWeight:700,fontSize:15}}>WA Scheduler</div>
-            <div style={{fontSize:11,color:'#25d366'}}>✅ Conectado · Hola {userName}</div>
+            <div style={{fontSize:11,color:'#25d366'}}>✅ Conectado · Hola {user?.name}</div>
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
@@ -284,14 +348,12 @@ function App() {
           <button style={S.btnP} onClick={()=>setShowForm(true)}>+ Nuevo</button>
         </div>
       </header>
-
       <main style={S.main}>
         <div style={S.stats}>
           {[['⏳',pending.length,'Pendientes','#25d366'],['✅',sent.filter(m=>m.status==='sent').length,'Enviados','#1565c0'],['👥',contacts.length,'Contactos','#6a1b9a']].map(([ic,n,lb,cl])=>
             <div key={lb} style={S.statCard}><div style={{fontSize:22,fontWeight:800,color:cl}}>{n}</div><div style={{fontSize:11,color:'#999',marginTop:2}}>{lb}</div></div>
           )}
         </div>
-
         {pending.length>0&&<section>
           <div style={{fontWeight:700,fontSize:13,color:'#777',marginBottom:10}}>PROGRAMADOS</div>
           {pending.map(m=><div key={m.id} style={S.msgCard}>
@@ -306,7 +368,6 @@ function App() {
             </div>
           </div>)}
         </section>}
-
         {sent.length>0&&<section style={{marginTop:20}}>
           <div style={{fontWeight:700,fontSize:13,color:'#777',marginBottom:10}}>HISTORIAL</div>
           {sent.map(m=><div key={m.id} style={{...S.msgCard,opacity:.6,background:'#f9f9f9'}}>
@@ -317,27 +378,22 @@ function App() {
             <div style={{fontSize:12,color:'#888',marginTop:4}}>{m.message?.slice(0,80)}</div>
           </div>)}
         </section>}
-
         {pending.length===0&&sent.length===0&&<div style={{textAlign:'center',padding:'60px 20px',color:'#bbb'}}>
           <div style={{fontSize:48}}>📭</div>
           <div style={{fontWeight:600,marginTop:12}}>Sin mensajes aun</div>
           <div style={{fontSize:13,marginTop:4}}>Presiona + Nuevo para programar</div>
         </div>}
       </main>
-
-      {/* Modal contactos desde app principal */}
-      {showContacts && <ContactsModal onClose={()=>setShowContacts(false)} contacts={contacts} setContacts={setContacts}/>}
-
-      {/* Modal nuevo mensaje */}
+      {showContacts&&<ContactsModal onClose={()=>setShowContacts(false)} contacts={contacts} setContacts={setContacts} token={token} waReady={waReady}/>}
       {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>Nuevo mensaje</h3>
           <label style={S.label}>Buscar contacto</label>
           <input style={S.input} placeholder='Nombre o numero...' value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {search.length>0&&!selContact&&<div style={S.contactList}>
-            {filtered.slice(0,6).map(c=><div key={c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5'}} onClick={()=>{setSelContact(c);setSearch(c.name);}}>
+            {filtered.slice(0,6).map(c=><div key={c.id||c.phone} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5'}} onClick={()=>{setSelContact(c);setSearch(c.name);}}>
               <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
-              <div style={{fontSize:11,color:'#888'}}>{c.phone}{c.email?' · '+c.email:''}</div>
+              <div style={{fontSize:11,color:'#888'}}>{c.phone}</div>
             </div>)}
             {filtered.length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>Sin resultados</div>}
           </div>}
@@ -363,4 +419,5 @@ function App() {
     </div>
   );
 }
+
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));

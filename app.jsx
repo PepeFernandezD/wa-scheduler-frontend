@@ -314,10 +314,14 @@ function App() {
     return()=>clearInterval(pollRef.current);
   },[step,token]);
 
+  // Load contacts from DB whenever token becomes available (or changes)
+  useEffect(()=>{
+    if(!token) return;
+    api('/contacts',{},token).then(d=>{ if(Array.isArray(d) && d.length>=0) setContacts(d); });
+  },[token]);
+
   useEffect(()=>{
     if(step!==3)return;
-    // Load contacts from DB on app entry
-    api('/contacts',{},token).then(d=>{ if(Array.isArray(d)) setContacts(d); });
     const sync=async()=>{try{const d=await api('/messages',{},token);setMessages(d);}catch{}};
     sync();const id=setInterval(sync,5000);return()=>clearInterval(id);
   },[step,token]);
@@ -334,9 +338,7 @@ function App() {
       const status = await api('/status', {}, data.token);
       if (status.ready) {
         setWaReady(true);
-        const c = await api('/contacts', {}, data.token);
-        if (Array.isArray(c)) setContacts(c);
-        setStep(3); // Skip QR, go straight to app
+        setStep(3); // Skip QR, contacts will load via useEffect([token])
       } else {
         setStep(1); // Need QR
       }

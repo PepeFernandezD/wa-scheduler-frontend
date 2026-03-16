@@ -431,7 +431,7 @@ function App() {
         </div>
         <div style={{display:'flex',gap:8}}>
           <button style={{...S.btnSm,color:'#1565c0',background:'#e3f2fd'}} onClick={()=>setShowContacts(true)}>👥 Contactos</button>
-          <button style={S.btnP} onClick={()=>setShowForm(true)}>+ Nuevo</button>
+          <button style={S.btnP} onClick={()=>{setShowForm(true);api('/contacts',{},token).then(d=>{if(Array.isArray(d)&&d.length>0)setContacts(d);});}}>+ Nuevo</button>
         </div>
       </header>
       <main style={S.main}>
@@ -476,12 +476,12 @@ function App() {
           <h3 style={{margin:'0 0 16px',fontSize:17}}>Nuevo mensaje</h3>
           <label style={S.label}>Buscar contacto</label>
           <input style={S.input} placeholder='Nombre o numero...' value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
-          {search.length>0&&!selContact&&<div style={S.contactList}>
+          {!selContact&&<div style={S.contactList}>
             {filtered.slice(0,6).map(c=><div key={c.id||c.phone} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5'}} onClick={()=>{setSelContact(c);setSearch(c.name);}}>
               <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
               <div style={{fontSize:11,color:'#888'}}>{c.phone}</div>
             </div>)}
-            {filtered.length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>Sin resultados</div>}
+            {filtered.length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{contacts.length===0?'Cargando contactos...':'Sin resultados'}</div>}
           </div>}
           {selContact&&<div style={S.selBadge}>✔ {selContact.name} · {selContact.phone}</div>}
           <button style={{...S.btnSm,marginTop:4,marginBottom:8,color:'#1976d2',border:'1px dashed #90caf9',width:'100%',justifyContent:'center',background:'none'}} onClick={()=>setShowManual(v=>!v)}>

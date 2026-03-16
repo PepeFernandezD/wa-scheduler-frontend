@@ -239,12 +239,19 @@ function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
     if (!toImport.length) return;
     setImporting(true);
     try {
-      const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts: toImport.map(c=>({...c, source:'whatsapp'}))})}, token);
-      if (res.error) { setMsg('❌ '+res.error); setImporting(false); return; }
+      const CHUNK = 100;
+      let total = 0;
+      for (let i = 0; i < toImport.length; i += CHUNK) {
+        const chunk = toImport.slice(i, i + CHUNK).map(c=>({...c, source:'whatsapp'}));
+        setMsg('⏳ Importando... ('+(Math.min(i+CHUNK, toImport.length))+'/'+toImport.length+')');
+        const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts: chunk})}, token);
+        if (res.error) { setMsg('❌ '+res.error); setImporting(false); return; }
+        total += res.inserted || chunk.length;
+      }
       const fresh = await api('/contacts', {}, token);
       if (Array.isArray(fresh)) setContacts(fresh);
       setImported(true);
-      setMsg('✅ '+(res.inserted||toImport.length)+' contactos importados');
+      setMsg('✅ '+total+' contactos importados');
     } catch(e) { setMsg('❌ '+e.message); }
     setImporting(false);
   }

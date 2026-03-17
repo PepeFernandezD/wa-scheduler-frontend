@@ -315,6 +315,56 @@ function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
 }
 
 
+function DateTimePicker({value, onChange}) {
+  function getNow() {
+    const d = value ? new Date(value) : new Date(Date.now()+5*60000);
+    let m = Math.ceil(d.getMinutes()/5)*5; let h = d.getHours();
+    if (m===60) { m=0; h++; } if (h===24) h=0;
+    return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:h,minute:m};
+  }
+  const [open,setOpen]=React.useState(false);
+  const [sel,setSel]=React.useState(getNow);
+  function handleOpen(){setSel(getNow());setOpen(true);}
+  function confirm(){
+    const d=new Date(sel.year,sel.month-1,sel.day,sel.hour,sel.minute);
+    if(d<=new Date())return;
+    const p=n=>String(n).padStart(2,'0');
+    onChange(sel.year+'-'+p(sel.month)+'-'+p(sel.day)+'T'+p(sel.hour)+':'+p(sel.minute));
+    setOpen(false);
+  }
+  function upd(k,v){setSel(p=>{const n={...p,[k]:v};const mx=new Date(n.year,n.month,0).getDate();if(n.day>mx)n.day=mx;return n;});}
+  const MO=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const years=[new Date().getFullYear(),new Date().getFullYear()+1,new Date().getFullYear()+2];
+  const days=Array.from({length:new Date(sel.year,sel.month,0).getDate()},(_,i)=>i+1);
+  const hours=Array.from({length:24},(_,i)=>i);
+  const mins=[0,5,10,15,20,25,30,35,40,45,50,55];
+  const disp=value?(()=>{const d=new Date(value);return d.getDate()+' '+MO[d.getMonth()]+' '+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');})():'Seleccionar fecha y hora';
+  const col={flex:1,maxHeight:160,overflowY:'auto',borderRight:'1px solid #f0f0f0'};
+  const btn=a=>({padding:'5px 4px',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:a?700:400,background:a?'#25d366':'transparent',color:a?'#fff':'inherit',border:'none',display:'block',width:'100%',textAlign:'center'});
+  return React.createElement('div',null,
+    React.createElement('button',{type:'button',style:{...S.input,textAlign:'left',cursor:'pointer',color:value?'#222':'#aaa',display:'flex',justifyContent:'space-between',alignItems:'center'},onClick:handleOpen},
+      React.createElement('span',null,disp),
+      React.createElement('span',{style:{fontSize:16}},'📅')
+    ),
+    open && React.createElement('div',{style:{marginTop:8,border:'1.5px solid #e5e7eb',borderRadius:12,overflow:'hidden',background:'#fff',boxShadow:'0 4px 16px rgba(0,0,0,.1)'}},
+      React.createElement('div',{style:{display:'flex',background:'#f5f5f5',borderBottom:'1px solid #eee'}},
+        ['Día','Mes','Año','H','Min'].map(h=>React.createElement('div',{key:h,style:{flex:1,fontSize:11,color:'#999',textAlign:'center',padding:'5px 0',fontWeight:600}},h))
+      ),
+      React.createElement('div',{style:{display:'flex',height:160}},
+        React.createElement('div',{style:col},days.map(dd=>React.createElement('button',{key:dd,style:btn(sel.day===dd),onClick:()=>upd('day',dd)},dd))),
+        React.createElement('div',{style:col},MO.map((m,i)=>React.createElement('button',{key:i,style:btn(sel.month===i+1),onClick:()=>upd('month',i+1)},m))),
+        React.createElement('div',{style:col},years.map(y=>React.createElement('button',{key:y,style:btn(sel.year===y),onClick:()=>upd('year',y)},y))),
+        React.createElement('div',{style:col},hours.map(h=>React.createElement('button',{key:h,style:btn(sel.hour===h),onClick:()=>upd('hour',h)},String(h).padStart(2,'0')))),
+        React.createElement('div',{style:{...col,borderRight:'none'}},mins.map(m=>React.createElement('button',{key:m,style:btn(sel.minute===m),onClick:()=>upd('minute',m)},String(m).padStart(2,'0'))))
+      ),
+      React.createElement('div',{style:{padding:'8px 12px',borderTop:'1px solid #eee',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        React.createElement('span',{style:{fontSize:12,color:'#555'}},sel.day+' '+MO[sel.month-1]+' '+sel.year+' '+String(sel.hour).padStart(2,'0')+':'+String(sel.minute).padStart(2,'0')),
+        React.createElement('button',{style:{...S.btnP},onClick:confirm},'Confirmar')
+      )
+    )
+  );
+}
+
 function App() {
   const [step, setStep] = useState(0); // 0=auth, 1=qr, 2=importar, 3=app
   const [authMode, setAuthMode] = useState('login'); // 'login'|'register'
@@ -339,6 +389,8 @@ function App() {
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [groups, setGroups] = useState([]);
+  const [recipientTab, setRecipientTab] = useState('contacts');
   const pollRef = useRef(null);
 
   useEffect(()=>{const id=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(id);},[]);

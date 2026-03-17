@@ -44,277 +44,6 @@ async function api(path, opts={}, token) {
   catch { return { error: r.ok ? 'Respuesta inesperada del servidor' : 'Error '+r.status+': '+text.slice(0,120) }; }
 }
 
-function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
-  const [tab, setTab] = useState('whatsapp');
-  const [clientId, setClientId] = useState('');
-  const [manualName, setManualName] = useState('');
-  const [manualPhone, setManualPhone] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [waContacts, setWaContacts] = useState([]);
-  const [waSelected, setWaSelected] = useState([]);
-
-  async function loadWaContacts() {
-    setLoading(true); setMsg('');
-    try {
-      const data = await api('/wa-contacts', {}, token);
-      if (data.error) { setMsg('❌ '+data.error); setLoading(false); return; }
-      if (!Array.isArray(data)) { setMsg('❌ Respuesta inesperada del servidor'); setLoading(false); return; }
-      setWaContacts(data);
-      setMsg(data.length > 0 ? '✅ '+data.length+' contactos encontrados' : '⚠️ No se encontraron contactos');
-    } catch(e) { setMsg('❌ Error al cargar: '+e.message); }
-    setLoading(false);
-  }
-
-  async function importWaSelected() {
-    const toImport = waSelected.length > 0 ? waContacts.filter((_,i)=>waSelected.includes(i)) : waContacts;
-    if (!toImport.length) return;
-    setLoading(true);
-    try {
-      const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts:toImport.map(c=>({...c,source:'whatsapp'}))})}, token);
-      if (res.error) { setMsg('❌ '+res.error); setLoading(false); return; }
-      const fresh = await api('/contacts', {}, token);
-      if (!fresh.error) setContacts(fresh);
-      setMsg('✅ '+(res.inserted||toImport.length)+' contactos importados de WhatsApp');
-    } catch(e) { setMsg('❌ Error al importar: '+e.message); }
-    setLoading(false);
-  }
-
-  function startGoogle() {
-    if (!clientId.trim()) return;
-    const p = new URLSearchParams({client_id:clientId.trim(), redirect_uri:'about:blank', response_type:'token', scope:GOOGLE_SCOPES});
-    const popup = window.open('https://accounts.google.com/o/oauth2/v2/auth?'+p,'gauth','width=500,height=600');
-    setLoading(true);
-    const poll = setInterval(()=>{
-      try {
-        if(popup.closed){clearInterval(poll);setLoading(false);return;}
-        const hash=popup.location.hash;
-        if(hash?.includes('access_token')){
-          const tk=new URLSearchParams(hash.slice(1)).get('access_token');
-          popup.close(); clearInterval(poll);
-          fetchGoogle(tk);
-        }
-      } catch {}
-    },500);
-  }
-
-  async function fetchGoogle(tkn) {
-    try {
-      const r = await fetch(PEOPLE_API,{headers:{Authorization:'Bearer '+tkn}});
-      const d = await r.json();
-      const c = (d.connections||[]).map(x=>({name:x.names?.[0]?.displayName||'Sin nombre',phone:x.phoneNumbers?.[0]?.value||'',email:x.emailAddresses?.[0]?.value||''})).filter(x=>x.phone);
-      if (c.length) {
-        await api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:c.map(x=>({...x,source:'google'}))})},token);
-        const fresh = await api('/contacts',{},token);
-        setContacts(fresh);
-        setMsg('✅ '+c.length+' contactos de Google importados');
-      }
-    } catch { setMsg('❌ Error al importar de Google'); }
-    setLoading(false);
-  }
-
-  async function addManual() {
-    if (!manualName.trim()||!manualPhone.trim()) return;
-    const data = await api('/contacts',{method:'POST',body:JSON.stringify({name:manualName.trim(),phone:manualPhone.trim()})},token);
-    if (!data.error) {
-      setContacts(p=>[...p.filter(c=>c.phone!==data.phone),data]);
-      setMsg('✅ Contacto agregado: '+manualName.trim());
-      setManualName(''); setManualPhone('');
-    } else setMsg('❌ '+data.error);
-  }
-
-  const tabStyle = t => ({flex:1,padding:'8px 4px',border:'none',cursor:'pointer',fontWeight:600,fontSize:13,background:tab===t?'#fff':'transparent',color:tab===t?'#25d366':'#999',borderBottom:tab===t?'2px solid #25d366':'2px solid transparent'});
-
-  return (
-    <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={S.modal}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <h3 style={{margin:0,fontSize:17}}>👥 Importar contactos</h3>
-          <button style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'#aaa'}} onClick={onClose}>×</button>
-        </div>
-        <div style={{display:'flex',borderBottom:'2px solid #f0f0f0',marginBottom:16}}>
-          <button style={tabStyle('whatsapp')} onClick={()=>setTab('whatsapp')}>WhatsApp</button>
-          <button style={tabStyle('google')} onClick={()=>setTab('google')}>Google</button>
-          <button style={tabStyle('manual')} onClick={()=>setTab('manual')}>Manual</button>
-        </div>
-
-        {tab==='whatsapp' && (
-          <div>
-            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Importa tus contactos directamente desde WhatsApp conectado.</p>
-            {!waReady && <div style={{padding:'10px 14px',background:'#fff3cd',borderRadius:8,fontSize:13,color:'#856404',marginBottom:12}}>⚠️ Primero conecta tu WhatsApp</div>}
-            {waReady && waContacts.length===0 && (
-              <button style={{...S.btn,opacity:loading?0.5:1}} disabled={loading} onClick={loadWaContacts}>
-                {loading?'⏳ Cargando...':'📱 Cargar contactos de WhatsApp'}
-              </button>
-            )}
-            {waContacts.length>0 && (
-              <div>
-                <div style={{fontSize:13,color:'#555',marginBottom:8}}>{waContacts.length} contactos. Selecciona o importa todos:</div>
-                <div style={{...S.contactList,maxHeight:200}}>
-                  {waContacts.map((c,i)=>(
-                    <div key={i} style={{padding:'8px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:waSelected.includes(i)?'#f0fff4':'white',userSelect:'none'}} onMouseDown={(e)=>{e.preventDefault();setWaSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}}>
-                      <span style={{fontSize:16,pointerEvents:'none'}}>{waSelected.includes(i)?'✅':'⬜'}</span>
-                      <div><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{c.phone}</div></div>
-                    </div>
-                  ))}
-                </div>
-                <button style={{...S.btn,marginTop:12,opacity:loading?0.5:1}} disabled={loading} onClick={importWaSelected}>
-                  {loading?'⏳ Importando...':'⬇️ Importar '+(waSelected.length>0?waSelected.length+' seleccionados':'todos')}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab==='google' && (
-          <div>
-            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Conecta Google Contacts. Necesitas el Client ID de Google Cloud Console.</p>
-            <label style={S.label}>Google Client ID</label>
-            <input style={S.input} placeholder='xxxxx.apps.googleusercontent.com' value={clientId} onChange={e=>setClientId(e.target.value)}/>
-            <button style={{...S.btn,marginTop:12,opacity:clientId.trim()&&!loading?1:0.4}} disabled={!clientId.trim()||loading} onClick={startGoogle}>
-              {loading?'⏳ Conectando...':'🔗 Conectar Google Contacts'}
-            </button>
-          </div>
-        )}
-
-        {tab==='manual' && (
-          <div>
-            <p style={{fontSize:13,color:'#666',margin:'0 0 12px'}}>Agrega un contacto con nombre y número.</p>
-            <label style={S.label}>Nombre</label>
-            <input style={S.input} placeholder='Nombre del contacto' value={manualName} onChange={e=>setManualName(e.target.value)}/>
-            <label style={S.label}>Número WhatsApp</label>
-            <input style={S.input} placeholder='+56912345678' value={manualPhone} onChange={e=>setManualPhone(e.target.value)}/>
-            <button style={{...S.btn,marginTop:12,opacity:(manualName&&manualPhone)?1:0.4}} disabled={!manualName||!manualPhone} onClick={addManual}>
-              ➕ Agregar contacto
-            </button>
-          </div>
-        )}
-
-        {msg && <div style={{marginTop:12,padding:'10px 14px',background:'#f0fff4',borderRadius:10,fontSize:13,color:'#1b5e20'}}>{msg}</div>}
-        <div style={{marginTop:16,fontSize:12,color:'#aaa',textAlign:'center'}}>{contacts.length} contacto{contacts.length!==1?'s':''} en total</div>
-      </div>
-    </div>
-  );
-}
-
-function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
-  const [waContacts, setWaContacts] = React.useState([]);
-  const [waGroups, setWaGroups] = React.useState([]);
-  const [tab, setTab] = React.useState('contacts');
-  const [search, setSearch] = React.useState('');
-  const [selContacts, setSelContacts] = React.useState(new Set());
-  const [selGroups, setSelGroups] = React.useState(new Set());
-  const [loading, setLoading] = React.useState(false);
-  const [importing, setImporting] = React.useState(false);
-  const [msg, setMsg] = React.useState('');
-  const [done, setDone] = React.useState(false);
-
-  const list = tab === 'groups' ? waGroups : waContacts;
-  const sel = tab === 'groups' ? selGroups : selContacts;
-  const setSel = tab === 'groups' ? setSelGroups : setSelContacts;
-
-  const filtered = React.useMemo(() =>
-    search.trim() ? list.filter(c => c.name.toLowerCase().includes(search.toLowerCase())) : list,
-    [list, search]
-  );
-
-  async function loadAll() {
-    setLoading(true); setMsg('');
-    try {
-      const [dataC, dataG] = await Promise.all([
-        api('/wa-contacts', {}, token),
-        api('/wa-groups', {}, token)
-      ]);
-      if (dataC.error) { setMsg('❌ '+dataC.error); setLoading(false); return; }
-      const c = Array.isArray(dataC) ? dataC : [];
-      const g = Array.isArray(dataG) ? dataG : [];
-      setWaContacts(c);
-      setWaGroups(g);
-      setSelContacts(new Set(c.map((_,i)=>i)));
-      setSelGroups(new Set(g.map((_,i)=>i)));
-    } catch(e) { setMsg('❌ '+e.message); }
-    setLoading(false);
-  }
-
-  function toggleOne(i) {
-    setSel(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
-  }
-  function toggleAll() {
-    setSel(sel.size === list.length ? new Set() : new Set(list.map((_,i)=>i)));
-  }
-
-  async function doImport() {
-    const toC = waContacts.filter((_,i) => selContacts.has(i));
-    const toG = waGroups.filter((_,i) => selGroups.has(i));
-    const all = [...toC.map(c=>({...c,source:'whatsapp'})), ...toG.map(g=>({...g,source:'whatsapp_group'}))];
-    if (!all.length) return;
-    setImporting(true);
-    try {
-      const CHUNK = 100; let total = 0;
-      for (let i = 0; i < all.length; i += CHUNK) {
-        const chunk = all.slice(i, i+CHUNK);
-        setMsg('⏳ Importando... ('+(Math.min(i+CHUNK,all.length))+'/'+all.length+')');
-        const res = await api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:chunk})},token);
-        if (res.error) { setMsg('❌ '+res.error); setImporting(false); return; }
-        total += res.inserted||chunk.length;
-      }
-      const fresh = await api('/contacts',{},token);
-      if (Array.isArray(fresh)) setContacts(fresh);
-      setDone(true);
-      setMsg('✅ '+toC.length+' contactos y '+toG.length+' grupos importados');
-    } catch(e) { setMsg('❌ '+e.message); }
-    setImporting(false);
-  }
-
-  const tabBtn = (t) => ({flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:tab===t?'#fff':'transparent',color:tab===t?'#222':'#999',boxShadow:tab===t?'0 1px 4px rgba(0,0,0,.08)':'none'});
-  const totalSel = selContacts.size + selGroups.size;
-
-  return (
-    <div style={{marginTop:16,width:'100%'}}>
-      {waContacts.length===0 && !done && (
-        <button style={{...S.btn,background:'#e8f5e9',color:'#1b5e20',border:'1.5px solid #a5d6a7',opacity:loading?0.5:1}} disabled={loading} onClick={loadAll}>
-          {loading?'⏳ Cargando...':'📱 Cargar contactos y grupos de WhatsApp'}
-        </button>
-      )}
-      {(waContacts.length>0||waGroups.length>0)&&!done&&(
-        <div>
-          <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
-            <button style={tabBtn('contacts')} onClick={()=>{setTab('contacts');setSearch('');}}>👤 Contactos ({waContacts.length})</button>
-            <button style={tabBtn('groups')} onClick={()=>{setTab('groups');setSearch('');}}>👥 Grupos ({waGroups.length})</button>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <span style={{fontSize:13,color:'#555',fontWeight:600}}>{sel.size}/{list.length} seleccionados</span>
-            <button style={{...S.btnSm,fontSize:11}} onClick={toggleAll}>{sel.size===list.length?'Quitar todos':'Seleccionar todos'}</button>
-          </div>
-          <input style={{...S.input,marginBottom:8}} placeholder={'🔍 Buscar en '+list.length+(tab==='groups'?' grupos':' contactos')+'...'} value={search} onChange={e=>setSearch(e.target.value)}/>
-          <div style={{background:'#fff',border:'1.5px solid #eee',borderRadius:10,maxHeight:200,overflowY:'auto',marginBottom:8}}>
-            {filtered.length===0&&<div style={{padding:'12px',fontSize:13,color:'#aaa',textAlign:'center'}}>Sin resultados</div>}
-            {filtered.map((c)=>{
-              const realIdx=list.indexOf(c);
-              const isSel=sel.has(realIdx);
-              return(<div key={realIdx} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:isSel?'#f0fff4':'white',userSelect:'none'}} onMouseDown={e=>{e.preventDefault();toggleOne(realIdx);}}>
-                <span style={{fontSize:14,pointerEvents:'none',minWidth:18}}>{isSel?'✅':'⬜'}</span>
-                <div style={{textAlign:'left',pointerEvents:'none'}}>
-                  <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
-                  <div style={{fontSize:11,color:'#888'}}>{tab==='groups'?'Grupo':c.phone}</div>
-                </div>
-              </div>);
-            })}
-          </div>
-          <button style={{...S.btn,opacity:(importing||totalSel===0)?0.4:1}} disabled={importing||totalSel===0} onClick={doImport}>
-            {importing?'⏳ Importando...':'⬇️ Importar '+selContacts.size+' contactos + '+selGroups.size+' grupos'}
-          </button>
-        </div>
-      )}
-      {msg&&<div style={{marginTop:10,padding:'9px 12px',background:msg.startsWith('✅')?'#f0fff4':'#fff3f3',borderRadius:8,fontSize:13,color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
-      <button style={{...S.btn,background:'#f5f5f5',color:'#555',marginTop:12}} onClick={onDone}>
-        {contacts.length>0?'Continuar ('+contacts.length+' importados) →':'Continuar sin importar →'}
-      </button>
-    </div>
-  );
-}
-
-
 function DateTimePicker({value, onChange}) {
   function getNow() {
     const d = value ? new Date(value) : new Date(Date.now()+5*60000);
@@ -380,7 +109,6 @@ function App() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [showContacts, setShowContacts] = useState(false);
   const [tick, setTick] = useState(0);
   const [selContact, setSelContact] = useState(null);
   const [msgText, setMsgText] = useState('');
@@ -390,11 +118,10 @@ function App() {
   const [manualPhone, setManualPhone] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [groups, setGroups] = useState([]);
-  const [liveContacts, setLiveContacts] = useState([]);
   const [recipientTab, setRecipientTab] = useState('contacts');
   const pollRef = useRef(null);
 
-  useEffect(()=>{const id=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(id);},[]);
+  useEffect(()=>{if(step!==3)return;const id=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(id);},[step]);
 
   useEffect(()=>{
     if(step!==1)return;
@@ -467,7 +194,7 @@ function App() {
     setStep(3);
   }
 
-  async function scheduleMsg(){
+  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const [dataG,order]=await Promise.all([api('/wa-groups',{},token),api('/wa-order',{},token)]);const norm=p=>p?p.replace(/[^0-9]/g,''):'';const oArr=Array.isArray(order)?order:[];const oMap=new Map(oArr.map((id,i)=>[String(id),i]));const byOrder=(a,b)=>{const ak=oMap.get(String(a.phone))??oMap.get(norm(a.phone))??9999;const bk=oMap.get(String(b.phone))??oMap.get(norm(b.phone))??9999;return ak-bk;};if(Array.isArray(dataG))setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} async function scheduleMsg(){
     if(!selContact||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
@@ -553,27 +280,12 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btnP} onClick={()=>{setShowForm(true);setRecipientTab('contacts');setSearch('');
-          // Fetch recency order and reorder contacts client-side (fast — data already in memory)
-          api('/wa-order',{},token).then(order=>{
-            if(!Array.isArray(order)||!order.length) return;
-            const orderMap = new Map(order.map((id,i)=>[id,i]));
-            const normalize = p => p ? p.replace(/[^0-9]/g,'') : '';
-            setContacts(prev=>{
-              const sorted = [...prev].sort((a,b)=>{
-                // For groups, phone is the serialized id (e.g. 56912...@g.us) — try direct match first
-                const ai = orderMap.get(a.phone) ?? orderMap.get(normalize(a.phone)) ?? 9999;
-                const bi = orderMap.get(b.phone) ?? orderMap.get(normalize(b.phone)) ?? 9999;
-                return ai - bi;
-              });
-              return sorted;
-            });
-          });}}>+ Nuevo</button>
+          <button style={S.btnP} onClick={openNewForm}>+ Nuevo</button>
         </div>
       </header>
       <main style={S.main}>
         <div style={S.stats}>
-          {[['⏳',pending.length,'Pendientes','#25d366'],['✅',sent.filter(m=>m.status==='sent').length,'Enviados','#1565c0'],['👥',contacts.length,'Contactos','#6a1b9a']].map(([ic,n,lb,cl])=>
+          {[['⏳',pending.length,'Pendientes','#25d366'],['✅',sent.filter(m=>m.status==='sent').length,'Enviados','#1565c0'],['👥',contacts.filter(c=>c.source!=='whatsapp_group').length,'Contactos','#6a1b9a']].map(([ic,n,lb,cl])=>
             <div key={lb} style={S.statCard}><div style={{fontSize:22,fontWeight:800,color:cl}}>{n}</div><div style={{fontSize:11,color:'#999',marginTop:2}}>{lb}</div></div>
           )}
         </div>
@@ -593,7 +305,7 @@ function App() {
         </section>}
         {sent.length>0&&<section style={{marginTop:20}}>
           <div style={{fontWeight:700,fontSize:13,color:'#777',marginBottom:10}}>HISTORIAL</div>
-          {sent.map(m=><div key={m.id} style={{...S.msgCard,opacity:.6,background:'#f9f9f9'}}>
+          {sent.slice(0,20).map(m=><div key={m.id} style={{...S.msgCard,opacity:.6,background:'#f9f9f9'}}>
             <div style={{display:'flex',justifyContent:'space-between'}}>
               <div style={{fontWeight:600,fontSize:13}}>{m.contactName||m.phone}</div>
               <div style={{fontSize:11,color:m.status==='error'?'#e53935':'#aaa'}}>{m.status==='error'?'❌ Error':'✅ Enviado'} · {fmt(m.scheduledAt)}</div>
@@ -608,7 +320,7 @@ function App() {
         </div>}
       </main>
 
-      {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
+      {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setSelContact(null),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>Nuevo mensaje</h3>
           <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
@@ -617,28 +329,8 @@ function App() {
           </div>
           <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {!selContact&&<div style={S.contactList}>
-            {(recipientTab==='groups'
-            ? contacts.filter(c=>c.source==='whatsapp_group')
-            : contacts.filter(c=>c.source!=='whatsapp_group')
-          ).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,10).map(c=>(
-              <div key={c.phone}
-                style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}}
-                onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}>
-                <span style={{fontSize:14,pointerEvents:'none'}}>{c.isGroup?'👥':'👤'}</span>
-                <div style={{pointerEvents:'none'}}>
-                  <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
-                  <div style={{fontSize:11,color:'#888'}}>{c.isGroup?'Grupo':c.phone}</div>
-                </div>
-              </div>
-            ))}
-            {(recipientTab==='groups'
-            ? contacts.filter(c=>c.source==='whatsapp_group')
-            : contacts.filter(c=>c.source!=='whatsapp_group')
-          ).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())).length===0&&(
-              <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>
-                'Sin resultados'
-              </div>
-            )}
+            {(recipientTab==='groups' ? groups : contacts.filter(c=>c.source!=='whatsapp_group')).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,10).map(c=>( <div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}> <span style={{fontSize:14,pointerEvents:'none'}}>{recipientTab==='groups'?'👥':'👤'}</span> <div style={{pointerEvents:'none'}}> <div style={{fontWeight:500,fontSize:13}}>{c.name}</div> <div style={{fontSize:11,color:'#888'}}>{recipientTab==='groups'?'Grupo':c.phone}</div> </div> </div> ))}'
+            {(recipientTab==='groups' ? groups : contacts.filter(c=>c.source!=='whatsapp_group')).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0&&( <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&groups.length===0?'Cargando grupos...':'Sin resultados'}</div> )}
           </div>}
           {selContact&&<div style={S.selBadge}>{selContact.isGroup?'👥':'✔'} {selContact.name}{!selContact.isGroup?' · '+selContact.phone:''}</div>}
 
@@ -655,7 +347,7 @@ function App() {
           <label style={S.label}>Fecha y hora</label>
           <DateTimePicker value={schedAt} onChange={setSchedAt}/>
           <div style={{display:'flex',gap:10,marginTop:12}}>
-            <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>setShowForm(false)}>Cancelar</button>
+            <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>{setShowForm(false);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');setShowManual(false);setManualName('');setManualPhone('');}}>Cancelar</button>
             <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>Programar</button>
           </div>
         </div>

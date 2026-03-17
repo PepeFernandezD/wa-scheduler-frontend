@@ -469,9 +469,12 @@ function App() {
       const status = await api('/status', {}, data.token);
       if (status.ready) {
         setWaReady(true);
-        setStep(3); // Skip QR, contacts will load via useEffect([token])
+        const c = await api('/contacts', {}, data.token);
+        const hasContacts = Array.isArray(c) && c.length > 0;
+        if (hasContacts) setContacts(c);
+        setStep(hasContacts ? 3 : 2);
       } else {
-        setStep(1); // Need QR
+        setStep(1);
       }
     } catch(e) { setAuthError('Error de conexión'); }
     setAuthLoading(false);

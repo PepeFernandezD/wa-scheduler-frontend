@@ -41,7 +41,7 @@ async function api(path, opts={}, token) {
   });
   const text = await r.text();
   try { return JSON.parse(text); }
-  catch { return { error: r.ok ? 'Respuesta inesperada del servidor' : `Error ${r.status}: ${text.slice(0,120)}` }; }
+  catch { return { error: r.ok ? 'Respuesta inesperada del servidor' : 'Error '+r.status+': '+text.slice(0,120) }; }
 }
 
 function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
@@ -302,13 +302,13 @@ function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
             })}
           </div>
           <button style={{...S.btn,opacity:(importing||totalSel===0)?0.4:1}} disabled={importing||totalSel===0} onClick={doImport}>
-            {importing?'⏳ Importando...':`⬇️ Importar ${selContacts.size} contactos + ${selGroups.size} grupos`}
+            {importing?'⏳ Importando...':'⬇️ Importar '+selContacts.size+' contactos + '+selGroups.size+' grupos'}
           </button>
         </div>
       )}
       {msg&&<div style={{marginTop:10,padding:'9px 12px',background:msg.startsWith('✅')?'#f0fff4':'#fff3f3',borderRadius:8,fontSize:13,color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
       <button style={{...S.btn,background:'#f5f5f5',color:'#555',marginTop:12}} onClick={onDone}>
-        {contacts.length>0?`Continuar (${contacts.length} importados) →`:'Continuar sin importar →'}
+        {contacts.length>0?'Continuar ('+contacts.length+' importados) →':'Continuar sin importar →'}
       </button>
     </div>
   );

@@ -553,7 +553,18 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btnP} onClick={()=>{setShowForm(true);setRecipientTab('contacts');setSearch('');}}>+ Nuevo</button>
+          <button style={S.btnP} onClick={()=>{setShowForm(true);setRecipientTab('contacts');setSearch('');
+          // Fetch recency order and reorder contacts client-side (fast — data already in memory)
+          api('/wa-order',{},token).then(order=>{
+            if(!Array.isArray(order)||!order.length) return;
+            const orderMap = new Map(order.map((id,i)=>[id,i]));
+            const normalize = phone => phone ? phone.replace(/[^0-9]/g,'') : '';
+            setContacts(prev=>[...prev].sort((a,b)=>{
+              const ai = orderMap.get(a.phone) ?? orderMap.get(normalize(a.phone)) ?? 9999;
+              const bi = orderMap.get(b.phone) ?? orderMap.get(normalize(b.phone)) ?? 9999;
+              return ai - bi;
+            }));
+          });}}>+ Nuevo</button>
         </div>
       </header>
       <main style={S.main}>

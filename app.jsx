@@ -47,31 +47,51 @@ async function api(path, opts={}, token) {
 }
 
 function DateTimePicker({value, onChange}) {
-  function getNow() {
-    const d = value ? new Date(value) : new Date(Date.now()+5*60000);
-    let m = Math.ceil(d.getMinutes()/5)*5; let h = d.getHours();
-    if (m===60) { m=0; h++; } if (h===24) h=0;
-    return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:h,minute:m};
+  const now = new Date();
+  function getInitial() {
+    const d = value ? new Date(value) : new Date(now.getTime()+5*60000);
+    return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:d.getHours(),minute:d.getMinutes()};
   }
   const [open,setOpen]=React.useState(false);
-  const [sel,setSel]=React.useState(getNow);
-  function handleOpen(){setSel(getNow());setOpen(true);}
+  const [sel,setSel]=React.useState(getInitial);
+  const dayRef=React.useRef(),moRef=React.useRef(),yrRef=React.useRef(),hrRef=React.useRef(),minRef2=React.useRef();
+
+  function scrollCols(){
+    [[dayRef,sel.day-1],[moRef,sel.month-1],[yrRef,0],[hrRef,sel.hour],[minRef2,sel.minute]].forEach(([ref,idx])=>{
+      if(!ref.current)return;
+      const items=ref.current.children;
+      if(items[idx]){const h=items[idx].offsetHeight||24;ref.current.scrollTop=idx*h-ref.current.clientHeight/2+h/2;}
+    });
+  }
+  React.useEffect(()=>{if(open)setTimeout(scrollCols,0);},[open]);
+
+  function handleOpen(){setSel(getInitial());setOpen(true);}
   function confirm(){
     const d=new Date(sel.year,sel.month-1,sel.day,sel.hour,sel.minute);
-    if(d<=new Date())return;
+    if(d<=now)return;
     const p=n=>String(n).padStart(2,'0');
     onChange(sel.year+'-'+p(sel.month)+'-'+p(sel.day)+'T'+p(sel.hour)+':'+p(sel.minute));
     setOpen(false);
   }
   function upd(k,v){setSel(p=>{const n={...p,[k]:v};const mx=new Date(n.year,n.month,0).getDate();if(n.day>mx)n.day=mx;return n;});}
+
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const selDate=new Date(sel.year,sel.month-1,sel.day);
+  const isToday=selDate.getTime()===today.getTime();
+  const isPastDay=d=>new Date(sel.year,sel.month-1,d)<today;
+  const isPastHour=h=>isToday&&h<now.getHours();
+  const isPastMin=m=>isToday&&sel.hour===now.getHours()&&m<=now.getMinutes();
+
   const MO=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const years=[new Date().getFullYear(),new Date().getFullYear()+1,new Date().getFullYear()+2];
+  const years=[now.getFullYear(),now.getFullYear()+1,now.getFullYear()+2];
   const days=Array.from({length:new Date(sel.year,sel.month,0).getDate()},(_,i)=>i+1);
   const hours=Array.from({length:24},(_,i)=>i);
-  const mins=[0,5,10,15,20,25,30,35,40,45,50,55];
-  const disp=value?(()=>{const d=new Date(value);return d.getDate()+' '+MO[d.getMonth()]+' '+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');})():'Seleccionar fecha y hora';
+  const mins=Array.from({length:60},(_,i)=>i);
+  const p2=n=>String(n).padStart(2,'0');
+  const disp=value?(()=>{const d=new Date(value);return d.getDate()+' '+MO[d.getMonth()]+' '+d.getFullYear()+' '+p2(d.getHours())+':'+p2(d.getMinutes());})():'Seleccionar fecha y hora';
   const col={flex:1,maxHeight:160,overflowY:'auto',borderRight:'1px solid #f0f0f0'};
-  const btn=a=>({padding:'5px 4px',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:a?700:400,background:a?'#25d366':'transparent',color:a?'#fff':'inherit',border:'none',display:'block',width:'100%',textAlign:'center'});
+  const btn=(active,past)=>({padding:'5px 4px',borderRadius:6,cursor:past?'default':'pointer',fontSize:12,fontWeight:active?700:400,background:active?'#25d366':'transparent',color:past?'#ccc':active?'#fff':'inherit',border:'none',display:'block',width:'100%',textAlign:'center',pointerEvents:past?'none':'auto'});
+  const isPast=new Date(sel.year,sel.month-1,sel.day,sel.hour,sel.minute)<=now;
   return React.createElement('div',null,
     React.createElement('button',{type:'button',style:{...S.input,textAlign:'left',cursor:'pointer',color:value?'#222':'#aaa',display:'flex',justifyContent:'space-between',alignItems:'center'},onClick:handleOpen},
       React.createElement('span',null,disp),
@@ -82,15 +102,15 @@ function DateTimePicker({value, onChange}) {
         ['Día','Mes','Año','H','Min'].map(h=>React.createElement('div',{key:h,style:{flex:1,fontSize:11,color:'#999',textAlign:'center',padding:'5px 0',fontWeight:600}},h))
       ),
       React.createElement('div',{style:{display:'flex',height:160}},
-        React.createElement('div',{style:col},days.map(dd=>React.createElement('button',{key:dd,style:btn(sel.day===dd),onClick:()=>upd('day',dd)},dd))),
-        React.createElement('div',{style:col},MO.map((m,i)=>React.createElement('button',{key:i,style:btn(sel.month===i+1),onClick:()=>upd('month',i+1)},m))),
-        React.createElement('div',{style:col},years.map(y=>React.createElement('button',{key:y,style:btn(sel.year===y),onClick:()=>upd('year',y)},y))),
-        React.createElement('div',{style:col},hours.map(h=>React.createElement('button',{key:h,style:btn(sel.hour===h),onClick:()=>upd('hour',h)},String(h).padStart(2,'0')))),
-        React.createElement('div',{style:{...col,borderRight:'none'}},mins.map(m=>React.createElement('button',{key:m,style:btn(sel.minute===m),onClick:()=>upd('minute',m)},String(m).padStart(2,'0'))))
+        React.createElement('div',{ref:dayRef,style:col},days.map(dd=>React.createElement('button',{key:dd,style:btn(sel.day===dd,isPastDay(dd)),onClick:()=>!isPastDay(dd)&&upd('day',dd)},dd))),
+        React.createElement('div',{ref:moRef,style:col},MO.map((m,i)=>React.createElement('button',{key:i,style:btn(sel.month===i+1,false),onClick:()=>upd('month',i+1)},m))),
+        React.createElement('div',{ref:yrRef,style:col},years.map(y=>React.createElement('button',{key:y,style:btn(sel.year===y,false),onClick:()=>upd('year',y)},y))),
+        React.createElement('div',{ref:hrRef,style:col},hours.map(h=>React.createElement('button',{key:h,style:btn(sel.hour===h,isPastHour(h)),onClick:()=>!isPastHour(h)&&upd('hour',h)},p2(h)))),
+        React.createElement('div',{ref:minRef2,style:{...col,borderRight:'none'}},mins.map(m=>React.createElement('button',{key:m,style:btn(sel.minute===m,isPastMin(m)),onClick:()=>!isPastMin(m)&&upd('minute',m)},p2(m))))
       ),
       React.createElement('div',{style:{padding:'8px 12px',borderTop:'1px solid #eee',display:'flex',justifyContent:'space-between',alignItems:'center'}},
-        React.createElement('span',{style:{fontSize:12,color:'#555'}},sel.day+' '+MO[sel.month-1]+' '+sel.year+' '+String(sel.hour).padStart(2,'0')+':'+String(sel.minute).padStart(2,'0')),
-        React.createElement('button',{style:{...S.btnP},onClick:confirm},'Confirmar')
+        React.createElement('span',{style:{fontSize:12,color:isPast?'#e53935':'#555'}},sel.day+' '+MO[sel.month-1]+' '+sel.year+' '+p2(sel.hour)+':'+p2(sel.minute)),
+        React.createElement('button',{style:{...S.btnP,opacity:isPast?0.4:1},onClick:confirm},'Confirmar')
       )
     )
   );

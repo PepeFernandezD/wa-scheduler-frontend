@@ -175,12 +175,12 @@ function App() {
 
   async function autoImport(tok) {
     try {
-      const [dataC, dataG] = await Promise.all([
+      const [dataC, dataChats] = await Promise.all([
         api('/wa-contacts', {}, tok),
-        api('/wa-groups', {}, tok)
+        api('/wa-chats', {}, tok)
       ]);
       const c = Array.isArray(dataC) ? dataC : [];
-      const g = Array.isArray(dataG) ? dataG : [];
+      const g = Array.isArray(dataChats.groups) ? dataChats.groups : [];
       const all = [...c.map(x=>({...x,source:'whatsapp'})), ...g.map(x=>({...x,source:'whatsapp_group'}))];
       if (all.length > 0) {
         const CHUNK = 100;
@@ -194,7 +194,7 @@ function App() {
     setStep(3);
   }
 
-  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const [dataG,order]=await Promise.all([api('/wa-groups',{},token),api('/wa-order',{},token)]);const norm=p=>p?p.replace(/[^0-9]/g,''):'';const oArr=Array.isArray(order)?order:[];const oMap=new Map(oArr.map((id,i)=>[String(id),i]));const byOrder=(a,b)=>{const ak=oMap.get(String(a.phone))??oMap.get(norm(a.phone))??9999;const bk=oMap.get(String(b.phone))??oMap.get(norm(b.phone))??9999;return ak-bk;};if(Array.isArray(dataG))setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} async function scheduleMsg(){
+  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/[^0-9]/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const oMap=new Map(oArr.map((id,i)=>[String(id),i]));const byOrder=(a,b)=>{const ak=oMap.get(String(a.phone))??oMap.get(norm(a.phone))??9999;const bk=oMap.get(String(b.phone))??oMap.get(norm(b.phone))??9999;return ak-bk;};if(dataG.length)setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} async function scheduleMsg(){
     if(!selContact||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{

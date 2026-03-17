@@ -2,8 +2,6 @@ const { useState, useEffect, useRef } = React;
 const BACKEND = window.location.hostname === 'wa-scheduler-frontend.vercel.app'
   ? 'https://wa-scheduler-backend-1.onrender.com'
   : 'https://wa-scheduler-backend-dev.onrender.com';
-const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/contacts.readonly';
-const PEOPLE_API = 'https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,emailAddresses&pageSize=500';
 
 const pad = n => String(n).padStart(2,'0');
 const fmt = d => new Date(d).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
@@ -18,7 +16,6 @@ const S={
   btnSm:{padding:'7px 12px',borderRadius:8,background:'#f5f5f5',color:'#555',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontSize:12},
   btnP:{padding:'9px 18px',borderRadius:10,background:'#25d366',color:'#fff',border:'none',cursor:'pointer',fontWeight:600,fontSize:13},
   label:{display:'block',textAlign:'left',fontSize:12,fontWeight:600,color:'#555',marginBottom:5,marginTop:14},
-  optCard:{background:'#fafafa',border:'1.5px solid #eee',borderRadius:12,padding:'12px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginTop:12,textAlign:'left'},
   qrBox:{background:'#f8f9fa',borderRadius:16,padding:20,margin:'20px 0',display:'flex',alignItems:'center',justifyContent:'center',minHeight:220},
   app:{minHeight:'100vh',background:'#f0f2f5',fontFamily:'inherit'},
   header:{background:'#fff',padding:'12px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',boxShadow:'0 1px 0 #eee',position:'sticky',top:0,zIndex:10},
@@ -271,7 +268,6 @@ function App() {
     setMessages(p=>p.filter(m=>m.id!==id));
   }
 
-  const filtered=contacts.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.phone.includes(search));
   const pending=messages.filter(m=>m.status==='pending').sort((a,b)=>new Date(a.scheduledAt)-new Date(b.scheduledAt));
   const sent=messages.filter(m=>m.status==='sent'||m.status==='error');
 
@@ -457,7 +453,7 @@ function App() {
           </div>
           <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {!selContact&&<div style={S.contactList}>
-            {(()=>{const norm=p=>p?p.replace(/\D/g,''):'';const usageCount=new Map();messages.forEach(m=>{const k=norm(m.phone);usageCount.set(k,(usageCount.get(k)||0)+1);});const byOrder=(a,b)=>{const aUse=usageCount.get(norm(a.phone))||0;const bUse=usageCount.get(norm(b.phone))||0;if(bUse!==aUse)return bUse-aUse;const lookup=p=>{const n=norm(p);return chatOrderMap?.get(n)??chatOrderMap?.get('56'+n)??9999;};return lookup(a.phone)-lookup(b.phone);};const base=recipientTab==='groups'?groups:contacts.filter(c=>c.source!=='whatsapp_group');return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,15).map(c=>( <div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}> <span style={{fontSize:14,pointerEvents:'none'}}>{recipientTab==='groups'?'👥':'👤'}</span> <div style={{pointerEvents:'none'}}> <div style={{fontWeight:500,fontSize:13}}>{c.name}</div> <div style={{fontSize:11,color:'#888'}}>{recipientTab==='groups'?'Grupo':c.phone}</div> </div> </div> ));})()}'
+            {(()=>{const norm=p=>p?p.replace(/\D/g,''):'';const usageCount=new Map();messages.forEach(m=>{const k=norm(m.phone);usageCount.set(k,(usageCount.get(k)||0)+1);});const byOrder=(a,b)=>{const aUse=usageCount.get(norm(a.phone))||0;const bUse=usageCount.get(norm(b.phone))||0;if(bUse!==aUse)return bUse-aUse;const lookup=p=>{const n=norm(p);return chatOrderMap?.get(n)??chatOrderMap?.get('56'+n)??9999;};return lookup(a.phone)-lookup(b.phone);};const base=recipientTab==='groups'?groups:contacts.filter(c=>c.source!=='whatsapp_group');return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,15).map(c=>( <div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}> <span style={{fontSize:14,pointerEvents:'none'}}>{recipientTab==='groups'?'👥':'👤'}</span> <div style={{pointerEvents:'none'}}> <div style={{fontWeight:500,fontSize:13}}>{c.name}</div> <div style={{fontSize:11,color:'#888'}}>{recipientTab==='groups'?'Grupo':c.phone}</div> </div> </div> ));})()}
             {(recipientTab==='groups' ? groups : contacts.filter(c=>c.source!=='whatsapp_group')).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0&&( <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&groups.length===0?'Cargando grupos...':'Sin resultados'}</div> )}
           </div>}
           {selContact&&<div style={S.selBadge}>{selContact.isGroup?'👥':'✔'} {selContact.name}{!selContact.isGroup?' · '+selContact.phone:''}</div>}

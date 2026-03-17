@@ -118,6 +118,7 @@ function App() {
   const [manualPhone, setManualPhone] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [groups, setGroups] = useState([]);
+  const [chatOrderMap, setChatOrderMap] = useState(null);
   const [recipientTab, setRecipientTab] = useState('contacts');
   const pollRef = useRef(null);
 
@@ -194,7 +195,7 @@ function App() {
     setStep(3);
   }
 
-  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const oMap=new Map(oArr.map((id,i)=>[normId(id),i]));const byOrder=(a,b)=>{const ak=oMap.get(norm(a.phone))??9999;const bk=oMap.get(norm(b.phone))??9999;return ak-bk;};if(dataG.length)setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} async function scheduleMsg(){
+  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const oMap=new Map(oArr.map((id,i)=>[normId(id),i]));setChatOrderMap(oMap);const byOrder=(a,b)=>{const ak=oMap.get(norm(a.phone))??9999;const bk=oMap.get(norm(b.phone))??9999;return ak-bk;};if(dataG.length)setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} async function scheduleMsg(){
     if(!selContact||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
@@ -329,7 +330,7 @@ function App() {
           </div>
           <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {!selContact&&<div style={S.contactList}>
-            {(recipientTab==='groups' ? groups : contacts.filter(c=>c.source!=='whatsapp_group')).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,10).map(c=>( <div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}> <span style={{fontSize:14,pointerEvents:'none'}}>{recipientTab==='groups'?'👥':'👤'}</span> <div style={{pointerEvents:'none'}}> <div style={{fontWeight:500,fontSize:13}}>{c.name}</div> <div style={{fontSize:11,color:'#888'}}>{recipientTab==='groups'?'Grupo':c.phone}</div> </div> </div> ))}'
+            {(()=>{const norm=p=>p?p.replace(/\D/g,''):'';const byOrder=(a,b)=>{if(!chatOrderMap)return 0;const ak=chatOrderMap.get(norm(a.phone))??9999;const bk=chatOrderMap.get(norm(b.phone))??9999;return ak-bk;};const base=recipientTab==='groups'?groups:contacts.filter(c=>c.source!=='whatsapp_group');return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,15).map(c=>( <div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}> <span style={{fontSize:14,pointerEvents:'none'}}>{recipientTab==='groups'?'👥':'👤'}</span> <div style={{pointerEvents:'none'}}> <div style={{fontWeight:500,fontSize:13}}>{c.name}</div> <div style={{fontSize:11,color:'#888'}}>{recipientTab==='groups'?'Grupo':c.phone}</div> </div> </div> ));})()}'
             {(recipientTab==='groups' ? groups : contacts.filter(c=>c.source!=='whatsapp_group')).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0&&( <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&groups.length===0?'Cargando grupos...':'Sin resultados'}</div> )}
           </div>}
           {selContact&&<div style={S.selBadge}>{selContact.isGroup?'👥':'✔'} {selContact.name}{!selContact.isGroup?' · '+selContact.phone:''}</div>}

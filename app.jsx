@@ -342,9 +342,31 @@ function App() {
       </header>
       <main style={S.main}>
         <div style={S.stats}>
-          {[['⏳',pending.length,'Pendientes','#25d366'],['✅',sent.filter(m=>m.status==='sent').length,'Enviados','#1565c0'],['👥',contacts.filter(c=>c.source!=='whatsapp_group').length,'Contactos','#6a1b9a']].map(([ic,n,lb,cl])=>
-            <div key={lb} style={S.statCard}><div style={{fontSize:22,fontWeight:800,color:cl}}>{n}</div><div style={{fontSize:11,color:'#999',marginTop:2}}>{lb}</div></div>
-          )}
+          {(()=>{
+            const next=pending[0];
+            const todayStart=new Date();todayStart.setHours(0,0,0,0);
+            const sentToday=messages.filter(m=>m.status==='sent'&&new Date(m.sentAt||m.scheduledAt)>=todayStart).length;
+            const totalContacts=contacts.filter(c=>c.source!=='whatsapp_group').length;
+            return [
+              <div key='next' style={S.statCard}>
+                <div style={{fontSize:13,fontWeight:800,color:'#25d366',lineHeight:1.2,minHeight:28,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {next ? next.contactName||next.phone : '—'}
+                </div>
+                <div style={{fontSize:11,color:'#999',marginTop:4}}>
+                  {next ? fmt(next.scheduledAt) : 'Sin pendientes'}
+                </div>
+                <div style={{fontSize:10,color:'#bbb',marginTop:1}}>Próximo envío</div>
+              </div>,
+              <div key='today' style={S.statCard}>
+                <div style={{fontSize:22,fontWeight:800,color:'#1565c0'}}>{sentToday}</div>
+                <div style={{fontSize:11,color:'#999',marginTop:2}}>Enviados hoy</div>
+              </div>,
+              <div key='contacts' style={S.statCard}>
+                <div style={{fontSize:22,fontWeight:800,color:'#6a1b9a'}}>{totalContacts}</div>
+                <div style={{fontSize:11,color:'#999',marginTop:2}}>Contactos</div>
+              </div>
+            ];
+          })()}
         </div>
         {pending.length>0&&<section>
           <div style={{fontWeight:700,fontSize:13,color:'#777',marginBottom:10}}>PROGRAMADOS</div>

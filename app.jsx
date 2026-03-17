@@ -558,12 +558,16 @@ function App() {
           api('/wa-order',{},token).then(order=>{
             if(!Array.isArray(order)||!order.length) return;
             const orderMap = new Map(order.map((id,i)=>[id,i]));
-            const normalize = phone => phone ? phone.replace(/[^0-9]/g,'') : '';
-            setContacts(prev=>[...prev].sort((a,b)=>{
-              const ai = orderMap.get(a.phone) ?? orderMap.get(normalize(a.phone)) ?? 9999;
-              const bi = orderMap.get(b.phone) ?? orderMap.get(normalize(b.phone)) ?? 9999;
-              return ai - bi;
-            }));
+            const normalize = p => p ? p.replace(/[^0-9]/g,'') : '';
+            setContacts(prev=>{
+              const sorted = [...prev].sort((a,b)=>{
+                // For groups, phone is the serialized id (e.g. 56912...@g.us) — try direct match first
+                const ai = orderMap.get(a.phone) ?? orderMap.get(normalize(a.phone)) ?? 9999;
+                const bi = orderMap.get(b.phone) ?? orderMap.get(normalize(b.phone)) ?? 9999;
+                return ai - bi;
+              });
+              return sorted;
+            });
           });}}>+ Nuevo</button>
         </div>
       </header>

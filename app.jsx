@@ -49,7 +49,7 @@ async function api(path, opts={}, token) {
 function DateTimePicker({value, onChange}) {
   const now = new Date();
   function getInitial() {
-    const d = value ? new Date(value) : new Date(now.getTime()+5*60000);
+    const d = value ? new Date(value) : now;
     return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:d.getHours(),minute:d.getMinutes()};
   }
   const [open,setOpen]=React.useState(false);
@@ -229,7 +229,8 @@ function App() {
     setSelContact({name:msg.contactName,phone:msg.phone});
     setSearch(msg.contactName);
     setMsgText(msg.message);
-    setSchedAt(msg.scheduledAt.slice(0,16));
+    const d=new Date(msg.scheduledAt);const p=n=>String(n).padStart(2,'0');
+    setSchedAt(`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`);
     setShowManual(false);setRecipientTab('contacts');
     setShowForm(true);
   }

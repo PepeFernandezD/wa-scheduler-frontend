@@ -1,5 +1,5 @@
 const { useState, useEffect, useRef } = React;
-const BACKEND = window.location.hostname === 'wa-scheduler-frontend.vercel.app'
+const BACKEND = ['wa-scheduler-frontend.vercel.app','tuwppnitido.cl','www.tuwppnitido.cl'].includes(window.location.hostname)
   ? 'https://wa-scheduler-backend-1.onrender.com'
   : 'https://wa-scheduler-backend-dev.onrender.com';
 

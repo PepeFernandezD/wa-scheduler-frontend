@@ -390,6 +390,7 @@ function App() {
   const [manualPhone, setManualPhone] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [groups, setGroups] = useState([]);
+  const [liveContacts, setLiveContacts] = useState([]);
   const [recipientTab, setRecipientTab] = useState('contacts');
   const pollRef = useRef(null);
 
@@ -552,7 +553,14 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btnP} onClick={()=>{setShowForm(true);setRecipientTab('contacts');setSearch('');api('/contacts',{},token).then(d=>{if(Array.isArray(d)&&d.length>0)setContacts(d);});}}>+ Nuevo</button>
+          <button style={S.btnP} onClick={()=>{setShowForm(true);setRecipientTab('contacts');setSearch('');setGroups([]);setLiveContacts([]);
+          Promise.all([
+            api('/wa-contacts',{},token),
+            api('/wa-groups',{},token)
+          ]).then(([c,g])=>{
+            if(Array.isArray(c))setLiveContacts(c);
+            if(Array.isArray(g))setGroups(g);
+          });}}>+ Nuevo</button>
         </div>
       </header>
       <main style={S.main}>
@@ -601,7 +609,7 @@ function App() {
           </div>
           <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {!selContact&&<div style={S.contactList}>
-            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,10).map(c=>(
+            {(recipientTab==='groups'?groups:liveContacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,10).map(c=>(
               <div key={c.phone}
                 style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}}
                 onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}>
@@ -612,9 +620,9 @@ function App() {
                 </div>
               </div>
             ))}
-            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())).length===0&&(
+            {(recipientTab==='groups'?groups:liveContacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())).length===0&&(
               <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>
-                {recipientTab==='groups'&&!groups.length?'Cargando grupos...':'Sin resultados'}
+                {recipientTab==='groups'?(groups.length?'Sin resultados':'Cargando grupos...'):(liveContacts.length?'Sin resultados':'Cargando contactos...')}
               </div>
             )}
           </div>}

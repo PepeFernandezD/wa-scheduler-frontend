@@ -394,6 +394,7 @@ function App() {
               <div style={{fontSize:11,color:m.status==='error'?'#e53935':'#aaa'}}>{m.status==='error'?'❌ Error':'✅ Enviado'} · {fmt(m.scheduledAt)}</div>
             </div>
             <div style={{fontSize:12,color:'#888',marginTop:4}}>{m.message?.slice(0,80)}</div>
+            {m.status==='error'&&m.error&&<div style={{fontSize:11,color:'#e53935',marginTop:4,background:'#fff0f0',borderRadius:6,padding:'4px 8px'}}>{m.error}</div>}
           </div>)}
         </section>}
         {pending.length===0&&sent.length===0&&<div style={{textAlign:'center',padding:'60px 20px',color:'#bbb'}}>

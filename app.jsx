@@ -124,6 +124,7 @@ function App() {
   const [chatOrderMap, setChatOrderMap] = useState(null);
   const [recipientTab, setRecipientTab] = useState('contacts');
   const pollRef = useRef(null);
+  const msgRef = useRef(null);
 
   useEffect(()=>{if(step!==3)return;const id=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(id);},[step]);
 
@@ -363,7 +364,24 @@ function App() {
             <button style={{...S.btn,width:'auto',padding:'0 12px'}} onClick={()=>{if(manualName.trim()&&manualPhone.trim()){const c={id:'m-'+Date.now(),name:manualName.trim(),phone:manualPhone.trim()};setContacts(p=>[...p,c]);setSelContact(c);setSearch(c.name);setManualName('');setManualPhone('');setShowManual(false);}}}>OK</button>
           </div>}
           <label style={S.label}>Mensaje</label>
-          <textarea style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
+          <textarea ref={msgRef} style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+            {['{nombre}','{nombre_corto}','{telefono}'].map(v=>(
+              <button key={v} type='button' style={{fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px dashed #25d366',background:'#f0fff4',color:'#1b5e20',cursor:'pointer'}} onClick={()=>{
+                const el=msgRef.current;if(!el)return;
+                const s=el.selectionStart,e2=el.selectionEnd;
+                const next=msgText.slice(0,s)+v+msgText.slice(e2);
+                setMsgText(next);
+                setTimeout(()=>{el.focus();el.setSelectionRange(s+v.length,s+v.length);},0);
+              }}>{v}</button>
+            ))}
+          </div>
+          {msgText.includes('{')&&selContact&&(
+            <div style={{marginTop:6,padding:'6px 10px',background:'#f8f9fa',borderRadius:8,fontSize:12,color:'#555',borderLeft:'3px solid #25d366'}}>
+              <span style={{fontWeight:600,color:'#888',fontSize:11}}>PREVIEW · </span>
+              {msgText.replace(/\{nombre\}/gi,selContact.name).replace(/\{nombre_corto\}/gi,(selContact.name||'').split(' ')[0]).replace(/\{telefono\}/gi,selContact.phone)}
+            </div>
+          )}
           <label style={S.label}>Fecha y hora</label>
           <DateTimePicker value={schedAt} onChange={setSchedAt}/>
           <div style={{display:'flex',gap:10,marginTop:12}}>

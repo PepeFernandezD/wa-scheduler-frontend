@@ -199,210 +199,121 @@ function ContactsModal({onClose, contacts, setContacts, token, waReady}) {
 
 function OnboardingWaImport({token, waReady, contacts, setContacts, onDone}) {
   const [waContacts, setWaContacts] = React.useState([]);
+  const [waGroups, setWaGroups] = React.useState([]);
+  const [tab, setTab] = React.useState('contacts');
   const [search, setSearch] = React.useState('');
-  const [selected, setSelected] = React.useState(new Set());
+  const [selContacts, setSelContacts] = React.useState(new Set());
+  const [selGroups, setSelGroups] = React.useState(new Set());
   const [loading, setLoading] = React.useState(false);
   const [importing, setImporting] = React.useState(false);
   const [msg, setMsg] = React.useState('');
-  const [imported, setImported] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+
+  const list = tab === 'groups' ? waGroups : waContacts;
+  const sel = tab === 'groups' ? selGroups : selContacts;
+  const setSel = tab === 'groups' ? setSelGroups : setSelContacts;
 
   const filtered = React.useMemo(() =>
-    search.trim()
-      ? waContacts.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search))
-      : waContacts,
-    [waContacts, search]
+    search.trim() ? list.filter(c => c.name.toLowerCase().includes(search.toLowerCase())) : list,
+    [list, search]
   );
 
-  async function loadWa() {
+  async function loadAll() {
     setLoading(true); setMsg('');
     try {
-      const data = await api('/wa-contacts', {}, token);
-      if (data.error) { setMsg('❌ '+data.error); setLoading(false); return; }
-      if (!Array.isArray(data) || data.length===0) { setMsg('⚠️ No se encontraron contactos'); setLoading(false); return; }
-      setWaContacts(data);
-      setSelected(new Set(data.map((_,i)=>i)));
-      setMsg('');
+      const [dataC, dataG] = await Promise.all([
+        api('/wa-contacts', {}, token),
+        api('/wa-groups', {}, token)
+      ]);
+      if (dataC.error) { setMsg('❌ '+dataC.error); setLoading(false); return; }
+      const c = Array.isArray(dataC) ? dataC : [];
+      const g = Array.isArray(dataG) ? dataG : [];
+      setWaContacts(c);
+      setWaGroups(g);
+      setSelContacts(new Set(c.map((_,i)=>i)));
+      setSelGroups(new Set(g.map((_,i)=>i)));
     } catch(e) { setMsg('❌ '+e.message); }
     setLoading(false);
   }
 
   function toggleOne(i) {
-    setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; });
+    setSel(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
   }
-
   function toggleAll() {
-    setSelected(selected.size === waContacts.length ? new Set() : new Set(waContacts.map((_,i)=>i)));
+    setSel(sel.size === list.length ? new Set() : new Set(list.map((_,i)=>i)));
   }
 
   async function doImport() {
-    const toImport = waContacts.filter((_,i) => selected.has(i));
-    if (!toImport.length) return;
+    const toC = waContacts.filter((_,i) => selContacts.has(i));
+    const toG = waGroups.filter((_,i) => selGroups.has(i));
+    const all = [...toC.map(c=>({...c,source:'whatsapp'})), ...toG.map(g=>({...g,source:'whatsapp_group'}))];
+    if (!all.length) return;
     setImporting(true);
     try {
-      const CHUNK = 100;
-      let total = 0;
-      for (let i = 0; i < toImport.length; i += CHUNK) {
-        const chunk = toImport.slice(i, i + CHUNK).map(c=>({...c, source:'whatsapp'}));
-        setMsg('⏳ Importando... ('+(Math.min(i+CHUNK, toImport.length))+'/'+toImport.length+')');
-        const res = await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts: chunk})}, token);
+      const CHUNK = 100; let total = 0;
+      for (let i = 0; i < all.length; i += CHUNK) {
+        const chunk = all.slice(i, i+CHUNK);
+        setMsg('⏳ Importando... ('+(Math.min(i+CHUNK,all.length))+'/'+all.length+')');
+        const res = await api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:chunk})},token);
         if (res.error) { setMsg('❌ '+res.error); setImporting(false); return; }
-        total += res.inserted || chunk.length;
+        total += res.inserted||chunk.length;
       }
-      const fresh = await api('/contacts', {}, token);
+      const fresh = await api('/contacts',{},token);
       if (Array.isArray(fresh)) setContacts(fresh);
-      setImported(true);
-      setMsg('✅ '+total+' contactos importados');
+      setDone(true);
+      setMsg('✅ '+toC.length+' contactos y '+toG.length+' grupos importados');
     } catch(e) { setMsg('❌ '+e.message); }
     setImporting(false);
   }
 
+  const tabBtn = (t) => ({flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:tab===t?'#fff':'transparent',color:tab===t?'#222':'#999',boxShadow:tab===t?'0 1px 4px rgba(0,0,0,.08)':'none'});
+  const totalSel = selContacts.size + selGroups.size;
+
   return (
     <div style={{marginTop:16,width:'100%'}}>
-      {waContacts.length===0 && !imported && (
-        <button style={{...S.btn, background:'#e8f5e9', color:'#1b5e20', border:'1.5px solid #a5d6a7', opacity:loading?0.5:1}} disabled={loading} onClick={loadWa}>
-          {loading ? '⏳ Cargando contactos...' : '📱 Importar desde WhatsApp'}
+      {waContacts.length===0 && !done && (
+        <button style={{...S.btn,background:'#e8f5e9',color:'#1b5e20',border:'1.5px solid #a5d6a7',opacity:loading?0.5:1}} disabled={loading} onClick={loadAll}>
+          {loading?'⏳ Cargando...':'📱 Cargar contactos y grupos de WhatsApp'}
         </button>
       )}
-      {waContacts.length>0 && !imported && (
+      {(waContacts.length>0||waGroups.length>0)&&!done&&(
         <div>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
-            <span style={{fontSize:13, color:'#555', fontWeight:600}}>{selected.size}/{waContacts.length} seleccionados</span>
-            <button style={{...S.btnSm, fontSize:11}} onClick={toggleAll}>{selected.size===waContacts.length?'Quitar todos':'Seleccionar todos'}</button>
+          <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
+            <button style={tabBtn('contacts')} onClick={()=>{setTab('contacts');setSearch('');}}>👤 Contactos ({waContacts.length})</button>
+            <button style={tabBtn('groups')} onClick={()=>{setTab('groups');setSearch('');}}>👥 Grupos ({waGroups.length})</button>
           </div>
-          <input style={{...S.input, marginBottom:8}} placeholder={'🔍 Buscar en '+waContacts.length+' contactos...'} value={search} onChange={e=>setSearch(e.target.value)}/>
-          <div style={{background:'#fff', border:'1.5px solid #eee', borderRadius:10, maxHeight:220, overflowY:'auto', marginBottom:8}}>
-            {filtered.length===0 && <div style={{padding:'12px', fontSize:13, color:'#aaa', textAlign:'center'}}>Sin resultados para "{search}"</div>}
-            {filtered.map((c) => {
-              const realIdx = waContacts.indexOf(c);
-              const isSel = selected.has(realIdx);
-              return (
-                <div key={realIdx} style={{padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f5f5f5', display:'flex', alignItems:'center', gap:8, background:isSel?'#f0fff4':'white', userSelect:'none'}} onMouseDown={e=>{e.preventDefault(); toggleOne(realIdx);}}>
-                  <span style={{fontSize:14, pointerEvents:'none', minWidth:18}}>{isSel?'✅':'⬜'}</span>
-                  <div style={{textAlign:'left', pointerEvents:'none'}}>
-                    <div style={{fontWeight:500, fontSize:13}}>{c.name}</div>
-                    <div style={{fontSize:11, color:'#888'}}>{c.phone}</div>
-                  </div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <span style={{fontSize:13,color:'#555',fontWeight:600}}>{sel.size}/{list.length} seleccionados</span>
+            <button style={{...S.btnSm,fontSize:11}} onClick={toggleAll}>{sel.size===list.length?'Quitar todos':'Seleccionar todos'}</button>
+          </div>
+          <input style={{...S.input,marginBottom:8}} placeholder={'🔍 Buscar en '+list.length+(tab==='groups'?' grupos':' contactos')+'...'} value={search} onChange={e=>setSearch(e.target.value)}/>
+          <div style={{background:'#fff',border:'1.5px solid #eee',borderRadius:10,maxHeight:200,overflowY:'auto',marginBottom:8}}>
+            {filtered.length===0&&<div style={{padding:'12px',fontSize:13,color:'#aaa',textAlign:'center'}}>Sin resultados</div>}
+            {filtered.map((c)=>{
+              const realIdx=list.indexOf(c);
+              const isSel=sel.has(realIdx);
+              return(<div key={realIdx} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,background:isSel?'#f0fff4':'white',userSelect:'none'}} onMouseDown={e=>{e.preventDefault();toggleOne(realIdx);}}>
+                <span style={{fontSize:14,pointerEvents:'none',minWidth:18}}>{isSel?'✅':'⬜'}</span>
+                <div style={{textAlign:'left',pointerEvents:'none'}}>
+                  <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
+                  <div style={{fontSize:11,color:'#888'}}>{tab==='groups'?'Grupo':c.phone}</div>
                 </div>
-              );
+              </div>);
             })}
           </div>
-          <button style={{...S.btn, opacity:(importing||selected.size===0)?0.4:1}} disabled={importing||selected.size===0} onClick={doImport}>
-            {importing ? '⏳ Importando...' : `⬇️ Importar ${selected.size} contacto${selected.size!==1?'s':''}`}
+          <button style={{...S.btn,opacity:(importing||totalSel===0)?0.4:1}} disabled={importing||totalSel===0} onClick={doImport}>
+            {importing?'⏳ Importando...':`⬇️ Importar ${selContacts.size} contactos + ${selGroups.size} grupos`}
           </button>
         </div>
       )}
-      {msg && <div style={{marginTop:10, padding:'9px 12px', background:msg.startsWith('✅')?'#f0fff4':'#fff3f3', borderRadius:8, fontSize:13, color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
-      <button style={{...S.btn, background:'#f5f5f5', color:'#555', marginTop:12}} onClick={onDone}>
-        {contacts.length>0 ? `Continuar (${contacts.length} contactos) →` : 'Continuar sin contactos →'}
+      {msg&&<div style={{marginTop:10,padding:'9px 12px',background:msg.startsWith('✅')?'#f0fff4':'#fff3f3',borderRadius:8,fontSize:13,color:msg.startsWith('✅')?'#1b5e20':'#c00'}}>{msg}</div>}
+      <button style={{...S.btn,background:'#f5f5f5',color:'#555',marginTop:12}} onClick={onDone}>
+        {contacts.length>0?`Continuar (${contacts.length} importados) →`:'Continuar sin importar →'}
       </button>
     </div>
   );
 }
 
-
-
-function DateTimePicker({ value, onChange }) {
-  const [open, setOpen] = React.useState(false);
-
-  function getNow() {
-    const d = value ? new Date(value) : new Date(Date.now() + 5 * 60000);
-    return {
-      year: d.getFullYear(),
-      month: d.getMonth() + 1,
-      day: d.getDate(),
-      hour: d.getHours(),
-      minute: Math.ceil(d.getMinutes() / 5) * 5 % 60
-    };
-  }
-
-  const [sel, setSel] = React.useState(getNow);
-
-  function handleOpen() {
-    setSel(getNow());
-    setOpen(true);
-  }
-
-  function commit(s) {
-    const d = new Date(s.year, s.month - 1, s.day, s.hour, s.minute);
-    if (d <= new Date()) return;
-    const pad = n => String(n).padStart(2,'0');
-    onChange(s.year+'-'+pad(s.month)+'-'+pad(s.day)+'T'+pad(s.hour)+':'+pad(s.minute));
-    setOpen(false);
-  }
-
-  function set(key, val) {
-    setSel(prev => {
-      const next = {...prev, [key]: val};
-      const maxDay = new Date(next.year, next.month, 0).getDate();
-      if (next.day > maxDay) next.day = maxDay;
-      return next;
-    });
-  }
-
-  const now = new Date();
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const years = Array.from({length:3}, (_,i) => now.getFullYear()+i);
-  const days = Array.from({length: new Date(sel.year, sel.month, 0).getDate()}, (_,i) => i+1);
-  const hours = Array.from({length:24}, (_,i) => i);
-  const minutes = Array.from({length:12}, (_,i) => i*5);
-
-  const displayVal = value ? (() => {
-    const d = new Date(value);
-    return d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear()+' '+
-      String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  })() : 'Seleccionar fecha y hora';
-
-  const selStyle = (active) => ({
-    padding:'6px 10px', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:active?700:400,
-    background:active?'#25d366':'transparent', color:active?'#fff':'inherit',
-    border:'none', display:'block', width:'100%', textAlign:'center'
-  });
-
-  const colStyle = {
-    flex:1, maxHeight:200, overflowY:'auto', borderRight:'1px solid #f0f0f0',
-    scrollbarWidth:'none'
-  };
-
-  return (
-    <div style={{position:'relative'}}>
-      <button type='button'
-        style={{...S.input, textAlign:'left', cursor:'pointer', color:value?'#222':'#aaa', background:'#fafafa', display:'flex', justifyContent:'space-between', alignItems:'center'}}
-        onClick={handleOpen}>
-        <span>{displayVal}</span>
-        <span style={{fontSize:16}}>📅</span>
-      </button>
-      {open && (
-        <div style={{position:'fixed', inset:0, zIndex:200, display:'flex'}}>
-          <div style={{flex:1, background:'rgba(0,0,0,0.3)'}} onClick={()=>setOpen(false)}/>
-          <div style={{width:280, background:'#fff', display:'flex', flexDirection:'column', boxShadow:'-4px 0 20px rgba(0,0,0,.15)', overflowY:'auto'}}>
-            <div style={{padding:'16px 16px 8px', borderBottom:'1px solid #f0f0f0'}}>
-              <div style={{fontWeight:700, fontSize:15, marginBottom:2}}>Fecha y hora</div>
-              <div style={{fontSize:12, color:'#999'}}>Selecciona cuándo enviar</div>
-            </div>
-            <div style={{display:'flex', borderBottom:'1px solid #f0f0f0', background:'#fafafa'}}>
-              {['Día','Mes','Año','H','Min'].map(h => (
-                <div key={h} style={{flex:1, fontSize:11, color:'#999', textAlign:'center', padding:'6px 0', fontWeight:600}}>{h}</div>
-              ))}
-            </div>
-            <div style={{display:'flex', flex:1}}>
-              <div style={colStyle}>{days.map(d => <button key={d} style={selStyle(sel.day===d)} onClick={()=>set('day',d)}>{d}</button>)}</div>
-              <div style={colStyle}>{months.map((m,i) => <button key={i} style={selStyle(sel.month===i+1)} onClick={()=>set('month',i+1)}>{m}</button>)}</div>
-              <div style={colStyle}>{years.map(y => <button key={y} style={selStyle(sel.year===y)} onClick={()=>set('year',y)}>{y}</button>)}</div>
-              <div style={colStyle}>{hours.map(h => <button key={h} style={selStyle(sel.hour===h)} onClick={()=>set('hour',h)}>{String(h).padStart(2,'0')}</button>)}</div>
-              <div style={{...colStyle, borderRight:'none'}}>{minutes.map(m => <button key={m} style={selStyle(sel.minute===m)} onClick={()=>set('minute',m)}>{String(m).padStart(2,'0')}</button>)}</div>
-            </div>
-            <div style={{padding:16, borderTop:'1px solid #f0f0f0'}}>
-              <div style={{fontSize:13, color:'#555', marginBottom:10, textAlign:'center'}}>
-                {sel.day} {months[sel.month-1]} {sel.year} — {String(sel.hour).padStart(2,'0')}:{String(sel.minute).padStart(2,'0')}
-              </div>
-              <button style={{...S.btn}} onClick={()=>commit(sel)}>Confirmar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function App() {
   const [step, setStep] = useState(0); // 0=auth, 1=qr, 2=importar, 3=app

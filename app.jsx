@@ -111,6 +111,7 @@ function App() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingMsg, setEditingMsg] = useState(null);
   const [tick, setTick] = useState(0);
   const [selContact, setSelContact] = useState(null);
   const [msgText, setMsgText] = useState('');
@@ -197,13 +198,26 @@ function App() {
     setStep(3);
   }
 
-  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length)setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} async function scheduleMsg(){
+  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length)setGroups([...dataG].sort(byOrder));if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
+    setEditingMsg(msg);
+    setSelContact({name:msg.contactName,phone:msg.phone});
+    setSearch(msg.contactName);
+    setMsgText(msg.message);
+    setSchedAt(msg.scheduledAt.slice(0,16));
+    setShowManual(false);setRecipientTab('contacts');
+    setShowForm(true);
+  }
+  async function scheduleMsg(){
     if(!selContact||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
-      await api('/schedule',{method:'POST',body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})},token);
-      setShowForm(false);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');
-    }catch{alert('Error al programar.');}
+      if(editingMsg){
+        await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})},token);
+      } else {
+        await api('/schedule',{method:'POST',body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})},token);
+      }
+      setShowForm(false);setEditingMsg(null);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');
+    }catch{alert('Error al guardar.');}
   }
 
   async function deleteMsg(id){
@@ -302,7 +316,10 @@ function App() {
             <div style={{fontSize:13,color:'#555',marginTop:10,background:'#fafafa',borderRadius:8,padding:'8px 12px',borderLeft:'3px solid #25d366'}}>"{m.message}"</div>
             <div style={{display:'flex',justifyContent:'space-between',marginTop:10}}>
               <div style={{fontSize:11,color:'#bbb'}}>{fmt(m.scheduledAt)}</div>
-              <button style={{...S.btnSm,color:'#e53935'}} onClick={()=>deleteMsg(m.id)}>Cancelar</button>
+              <div style={{display:'flex',gap:6}}>
+                <button style={{...S.btnSm,color:'#1976d2'}} onClick={()=>openEditForm(m)}>Editar</button>
+                <button style={{...S.btnSm,color:'#e53935'}} onClick={()=>deleteMsg(m.id)}>Cancelar</button>
+              </div>
             </div>
           </div>)}
         </section>}
@@ -323,9 +340,9 @@ function App() {
         </div>}
       </main>
 
-      {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setSelContact(null),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
+      {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setEditingMsg(null),setSelContact(null),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
         <div style={S.modal}>
-          <h3 style={{margin:'0 0 16px',fontSize:17}}>Nuevo mensaje</h3>
+          <h3 style={{margin:'0 0 16px',fontSize:17}}>{editingMsg?'Editar mensaje':'Nuevo mensaje'}</h3>
           <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
             <button style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:recipientTab!=='groups'?'#fff':'transparent',color:recipientTab!=='groups'?'#222':'#999',boxShadow:recipientTab!=='groups'?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab('contacts');setSelContact(null);setSearch('');}}>👤 Contactos</button>
             <button style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:recipientTab==='groups'?'#fff':'transparent',color:recipientTab==='groups'?'#222':'#999',boxShadow:recipientTab==='groups'?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab('groups');setSelContact(null);setSearch('');if(!groups.length){const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);}}}>👥 Grupos</button>
@@ -351,7 +368,7 @@ function App() {
           <DateTimePicker value={schedAt} onChange={setSchedAt}/>
           <div style={{display:'flex',gap:10,marginTop:12}}>
             <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>{setShowForm(false);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');setShowManual(false);setManualName('');setManualPhone('');}}>Cancelar</button>
-            <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>Programar</button>
+            <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>{editingMsg?'Guardar cambios':'Programar'}</button>
           </div>
         </div>
       </div>}

@@ -609,11 +609,22 @@ function App() {
           </div>
           <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
           {!selContact&&<div style={S.contactList}>
-            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,8).map(c=><div key={c.phone} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8}} onClick={()=>{setSelContact(c);setSearch(c.name);}}>
-              <span style={{fontSize:14}}>{c.isGroup?'👥':'👤'}</span>
-              <div><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{c.isGroup?'Grupo':c.phone}</div></div>
-            </div>)}
-            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())).length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&!groups.length?'Cargando grupos...':'Sin resultados'}</div>}
+            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).slice(0,10).map(c=>(
+              <div key={c.phone}
+                style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}}
+                onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}>
+                <span style={{fontSize:14,pointerEvents:'none'}}>{c.isGroup?'👥':'👤'}</span>
+                <div style={{pointerEvents:'none'}}>
+                  <div style={{fontWeight:500,fontSize:13}}>{c.name}</div>
+                  <div style={{fontSize:11,color:'#888'}}>{c.isGroup?'Grupo':c.phone}</div>
+                </div>
+              </div>
+            ))}
+            {(recipientTab==='groups'?groups:contacts).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())).length===0&&(
+              <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>
+                {recipientTab==='groups'&&!groups.length?'Cargando grupos...':'Sin resultados'}
+              </div>
+            )}
           </div>}
           {selContact&&<div style={S.selBadge}>{selContact.isGroup?'👥':'✔'} {selContact.name}{!selContact.isGroup?' · '+selContact.phone:''}</div>}
 

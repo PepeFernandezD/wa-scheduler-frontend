@@ -180,6 +180,12 @@ function App() {
     sync();const id=setInterval(sync,5000);return()=>clearInterval(id);
   },[step,token]);
 
+  useEffect(()=>{
+    if(step!==3)return;
+    const poll=async()=>{try{const d=await api('/status',{},token);setWaReady(!!d.ready);}catch{}};
+    poll();const id=setInterval(poll,10000);return()=>clearInterval(id);
+  },[step,token]);
+
   async function handleAuth() {
     setAuthError(''); setAuthLoading(true);
     try {
@@ -333,7 +339,7 @@ function App() {
           <div style={{...S.logo,width:34,height:34,borderRadius:10,color:'#25d366',background:'#e8f5e9',margin:0}}><WaIcon/></div>
           <div>
             <div style={{fontWeight:700,fontSize:15}}>WA Scheduler</div>
-            <div style={{fontSize:11,color:'#25d366'}}>✅ Conectado · Hola {user?.name}</div>
+            <div style={{fontSize:11,color:waReady?'#25d366':'#f59e0b'}}>{waReady?'✅ Conectado':'⏳ Reconectando...'} · Hola {user?.name}</div>
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>

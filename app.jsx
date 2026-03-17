@@ -112,6 +112,11 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingMsg, setEditingMsg] = useState(null);
+  const [showContacts, setShowContacts] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
+  const [contactSearch, setContactSearch] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [tick, setTick] = useState(0);
   const [selContact, setSelContact] = useState(null);
   const [msgText, setMsgText] = useState('');
@@ -221,6 +226,19 @@ function App() {
     }catch{alert('Error al guardar.');}
   }
 
+  async function saveContact(){
+    if(!editName.trim()||!editPhone.trim())return;
+    try{
+      const data=await api('/contacts/'+editingContact.id,{method:'PATCH',body:JSON.stringify({name:editName.trim(),phone:editPhone.trim()})},token);
+      setContacts(prev=>prev.map(c=>c.id===editingContact.id?{...c,...data}:c));
+      setEditingContact(null);
+    }catch{alert('Error al guardar.');}
+  }
+  async function deleteContact(id){
+    if(!confirm('¿Eliminar este contacto?'))return;
+    try{await api('/contacts/'+id,{method:'DELETE'},token);}catch{}
+    setContacts(prev=>prev.filter(c=>c.id!==id));
+  }
   async function deleteMsg(id){
     try{await api('/messages/'+id,{method:'DELETE'},token);}catch{}
     setMessages(p=>p.filter(m=>m.id!==id));
@@ -298,6 +316,7 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
+          <button style={{...S.btnSm,fontSize:13,padding:'7px 12px'}} onClick={()=>{setShowContacts(true);setContactSearch('');setEditingContact(null);}}>👥 Contactos</button>
           <button style={S.btnP} onClick={openNewForm}>+ Nuevo</button>
         </div>
       </header>
@@ -340,6 +359,44 @@ function App() {
           <div style={{fontSize:13,marginTop:4}}>Presiona + Nuevo para programar</div>
         </div>}
       </main>
+
+      {showContacts&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowContacts(false)}>
+        <div style={{...S.modal,maxHeight:'85vh',display:'flex',flexDirection:'column'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <h3 style={{margin:0,fontSize:17}}>Contactos ({contacts.filter(c=>c.source!=='whatsapp_group').length})</h3>
+            <button style={{...S.btnSm}} onClick={()=>setShowContacts(false)}>✕ Cerrar</button>
+          </div>
+          <input style={{...S.input,marginBottom:10}} placeholder='Buscar...' value={contactSearch} onChange={e=>{setContactSearch(e.target.value);setEditingContact(null);}}/>
+          <div style={{overflowY:'auto',flex:1}}>
+            {contacts.filter(c=>c.source!=='whatsapp_group'&&(c.name.toLowerCase().includes(contactSearch.toLowerCase())||c.phone.includes(contactSearch))).map(c=>(
+              <div key={c.id} style={{borderBottom:'1px solid #f5f5f5',padding:'10px 4px'}}>
+                {editingContact?.id===c.id?(
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    <input style={{...S.input}} value={editName} onChange={e=>setEditName(e.target.value)} placeholder='Nombre'/>
+                    <input style={{...S.input}} value={editPhone} onChange={e=>setEditPhone(e.target.value)} placeholder='Teléfono'/>
+                    <div style={{display:'flex',gap:6}}>
+                      <button style={{...S.btnP,flex:1}} onClick={saveContact}>Guardar</button>
+                      <button style={{...S.btnSm,flex:1,justifyContent:'center'}} onClick={()=>setEditingContact(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ):(
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:14}}>{c.name}</div>
+                      <div style={{fontSize:12,color:'#888'}}>{c.phone}</div>
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button style={{...S.btnSm,color:'#1976d2'}} onClick={()=>{setEditingContact(c);setEditName(c.name);setEditPhone(c.phone);}}>Editar</button>
+                      <button style={{...S.btnSm,color:'#e53935'}} onClick={()=>deleteContact(c.id)}>Borrar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {contacts.filter(c=>c.source!=='whatsapp_group').length===0&&<div style={{textAlign:'center',padding:40,color:'#bbb'}}>Sin contactos</div>}
+          </div>
+        </div>
+      </div>}
 
       {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setEditingMsg(null),setSelContact(null),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
         <div style={S.modal}>

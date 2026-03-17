@@ -348,9 +348,11 @@ function App() {
     pollRef.current=setInterval(async()=>{
       try{
         const d=await api('/status',{},token);
-        if(d.ready){setWaReady(true);setQr(null);clearInterval(pollRef.current);
-          const c=await api('/contacts',{},token);setContacts(c);setStep(2);}
-        else if(d.qr) setQr(d.qr);
+        if(d.ready){
+          setWaReady(true); setQr(null); clearInterval(pollRef.current);
+          setStep(1.5);
+          autoImport(token);
+        } else if(d.qr) setQr(d.qr);
       }catch{}
     },2000);
     return()=>clearInterval(pollRef.current);
@@ -383,12 +385,33 @@ function App() {
         const c = await api('/contacts', {}, data.token);
         const hasContacts = Array.isArray(c) && c.length > 0;
         if (hasContacts) setContacts(c);
-        setStep(hasContacts ? 3 : 2);
+        if (hasContacts) { setStep(3); } else { setStep(1.5); autoImport(data.token); }
       } else {
         setStep(1);
       }
     } catch(e) { setAuthError('Error de conexión'); }
     setAuthLoading(false);
+  }
+
+  async function autoImport(tok) {
+    try {
+      const [dataC, dataG] = await Promise.all([
+        api('/wa-contacts', {}, tok),
+        api('/wa-groups', {}, tok)
+      ]);
+      const c = Array.isArray(dataC) ? dataC : [];
+      const g = Array.isArray(dataG) ? dataG : [];
+      const all = [...c.map(x=>({...x,source:'whatsapp'})), ...g.map(x=>({...x,source:'whatsapp_group'}))];
+      if (all.length > 0) {
+        const CHUNK = 100;
+        for (let i = 0; i < all.length; i += CHUNK) {
+          await api('/contacts/bulk', {method:'POST', body:JSON.stringify({contacts: all.slice(i,i+CHUNK)})}, tok);
+        }
+      }
+      const fresh = await api('/contacts', {}, tok);
+      if (Array.isArray(fresh)) setContacts(fresh);
+    } catch(e) { console.error('autoImport error:', e); }
+    setStep(3);
   }
 
   async function scheduleMsg(){
@@ -451,14 +474,17 @@ function App() {
     </div></div>
   );
 
-  // ---- PASO 2: Importar desde WA ----
-  if(step===2) return(
-    <div style={S.page}><div style={{...S.card,maxWidth:460}}>
+  // ---- PASO 1.5: Loading ----
+  if(step===1.5) return(
+    <div style={S.page}><div style={S.card}>
       <div style={{...S.logo,background:'#e8f5e9',color:'#25d366'}}>✅</div>
       <h2 style={{margin:0,fontSize:22,fontWeight:700}}>WhatsApp conectado!</h2>
-      <p style={{margin:'8px 0 4px',color:'#888',fontSize:14}}>Hola {user?.name} — importa tus contactos</p>
-      <OnboardingWaImport token={token} waReady={waReady} contacts={contacts} setContacts={setContacts} onDone={()=>setStep(3)}/>
-      <Dots active={2}/>
+      <p style={{margin:'8px 0 20px',color:'#888',fontSize:14}}>Importando tus contactos y grupos...</p>
+      <div style={{display:'flex',justifyContent:'center',alignItems:'center',margin:'20px 0'}}>
+        <div style={{width:48,height:48,border:'4px solid #e0e0e0',borderTop:'4px solid #25d366',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+      </div>
+      <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+      <p style={{fontSize:13,color:'#aaa',marginTop:8}}>Esto puede tomar unos segundos...</p>
     </div></div>
   );
 

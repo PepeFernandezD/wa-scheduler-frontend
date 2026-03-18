@@ -143,8 +143,10 @@ function App() {
   const [manualPhone, setManualPhone] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [groups, setGroups] = useState([]);
+  const [lists, setLists] = useState([]);
   const [chatOrderMap, setChatOrderMap] = useState(null);
   const [recipientTab, setRecipientTab] = useState('contacts');
+  const [selContacts, setSelContacts] = useState([]);
   const pollRef = useRef(null);
   const msgRef = useRef(null);
 
@@ -228,7 +230,7 @@ function App() {
     setStep(3);
   }
 
-  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setMsgText('');setSchedAt('');setShowManual(false);const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length){setGroups([...dataG].sort(byOrder));const existing=new Set(contacts.filter(c=>c.source==='whatsapp_group').map(c=>c.phone));const newGroups=dataG.filter(g=>!existing.has(g.phone));if(newGroups.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newGroups.map(g=>({...g,source:'whatsapp_group'}))})},token).then(()=>api('/contacts',{},token).then(d=>{if(Array.isArray(d))setContacts(d);}));}if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
+  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setShowManual(false);const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);const dbLists=contacts.filter(c=>c.source==='whatsapp_broadcast');if(dbLists.length)setLists(dbLists);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const dataL=Array.isArray(data.lists)?data.lists:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length){setGroups([...dataG].sort(byOrder));const existing=new Set(contacts.filter(c=>c.source==='whatsapp_group').map(c=>c.phone));const newGroups=dataG.filter(g=>!existing.has(g.phone));if(newGroups.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newGroups.map(g=>({...g,source:'whatsapp_group'}))})},token).then(()=>api('/contacts',{},token).then(d=>{if(Array.isArray(d))setContacts(d);}));}if(dataL.length){setLists([...dataL].sort(byOrder));const existingL=new Set(contacts.filter(c=>c.source==='whatsapp_broadcast').map(c=>c.phone));const newLists=dataL.filter(l=>!existingL.has(l.phone));if(newLists.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newLists.map(l=>({...l,source:'whatsapp_broadcast'}))})},token);}if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
     setEditingMsg(msg);
     setSelContact({name:msg.contactName,phone:msg.phone});
     setSearch(msg.contactName);
@@ -239,15 +241,16 @@ function App() {
     setShowForm(true);
   }
   async function scheduleMsg(){
-    if(!selContact||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
+    const recipients=selContacts.length?selContacts:(selContact?[selContact]:[]);
+    if(!recipients.length||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
       if(editingMsg){
-        await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})},token);
+        await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:recipients[0].phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:recipients[0].name})},token);
       } else {
-        await api('/schedule',{method:'POST',body:JSON.stringify({phone:selContact.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:selContact.name})},token);
+        await Promise.all(recipients.map(r=>api('/schedule',{method:'POST',body:JSON.stringify({phone:r.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:r.name})},token)));
       }
-      setShowForm(false);setEditingMsg(null);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');
+      setShowForm(false);setEditingMsg(null);setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setSearch('');
     }catch{alert('Error al guardar.');}
   }
 
@@ -445,19 +448,20 @@ function App() {
         </div>
       </div>}
 
-      {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setEditingMsg(null),setSelContact(null),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
+      {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setEditingMsg(null),setSelContact(null),setSelContacts([]),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>{editingMsg?'Editar mensaje':'Nuevo mensaje'}</h3>
           <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
-            <button style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:recipientTab!=='groups'?'#fff':'transparent',color:recipientTab!=='groups'?'#222':'#999',boxShadow:recipientTab!=='groups'?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab('contacts');setSelContact(null);setSearch('');}}>👤 Contactos</button>
-            <button style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:13,background:recipientTab==='groups'?'#fff':'transparent',color:recipientTab==='groups'?'#222':'#999',boxShadow:recipientTab==='groups'?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab('groups');setSelContact(null);setSearch('');if(!groups.length){const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);}}}>👥 Grupos</button>
+            {[['contacts','👤 Contactos'],['groups','👥 Grupos'],['lists','📢 Listas']].map(([tab,label])=>(
+              <button key={tab} style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:12,background:recipientTab===tab?'#fff':'transparent',color:recipientTab===tab?'#222':'#999',boxShadow:recipientTab===tab?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab(tab);setSearch('');}}>{label}</button>
+            ))}
           </div>
-          <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':'Buscar contacto...'} value={search} onChange={e=>{setSearch(e.target.value);setSelContact(null);}}/>
-          {!selContact&&<div style={S.contactList}>
-            {(()=>{const norm=p=>p?p.replace(/\D/g,''):'';const usageCount=new Map();messages.forEach(m=>{const k=norm(m.phone);usageCount.set(k,(usageCount.get(k)||0)+1);});const byOrder=(a,b)=>{const aUse=usageCount.get(norm(a.phone))||0;const bUse=usageCount.get(norm(b.phone))||0;if(bUse!==aUse)return bUse-aUse;const lookup=p=>{const n=norm(p);return chatOrderMap?.get(n)??chatOrderMap?.get('56'+n)??9999;};return lookup(a.phone)-lookup(b.phone);};const base=recipientTab==='groups'?groups:contacts.filter(c=>c.source!=='whatsapp_group');return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,15).map(c=>( <div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();setSelContact(c);setSearch(c.name);}}> <span style={{fontSize:14,pointerEvents:'none'}}>{recipientTab==='groups'?'👥':'👤'}</span> <div style={{pointerEvents:'none'}}> <div style={{fontWeight:500,fontSize:13}}>{c.name}</div> <div style={{fontSize:11,color:'#888'}}>{recipientTab==='groups'?'Grupo':c.phone}</div> </div> </div> ));})()}
-            {(recipientTab==='groups' ? groups : contacts.filter(c=>c.source!=='whatsapp_group')).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0&&( <div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&groups.length===0?'Cargando grupos...':'Sin resultados'}</div> )}
-          </div>}
-          {selContact&&<div style={S.selBadge}>{selContact.isGroup?'👥':'✔'} {selContact.name}{!selContact.isGroup?' · '+selContact.phone:''}</div>}
+          {selContacts.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>{selContacts.map(c=><span key={c.phone} style={{background:'#e8f5e9',color:'#1b5e20',fontSize:12,fontWeight:600,padding:'4px 10px',borderRadius:20,display:'flex',alignItems:'center',gap:4}}>{c.name}<span style={{cursor:'pointer',fontWeight:400,marginLeft:2}} onMouseDown={e=>{e.preventDefault();setSelContacts(p=>p.filter(x=>x.phone!==c.phone));}}>✕</span></span>)}</div>}
+          <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':recipientTab==='lists'?'Buscar lista...':'Buscar contacto...'} value={search} onChange={e=>setSearch(e.target.value)}/>
+          <div style={S.contactList}>
+            {(()=>{const norm=p=>p?p.replace(/\D/g,''):'';const usageCount=new Map();messages.forEach(m=>{const k=norm(m.phone);usageCount.set(k,(usageCount.get(k)||0)+1);});const byOrder=(a,b)=>{const aUse=usageCount.get(norm(a.phone))||0;const bUse=usageCount.get(norm(b.phone))||0;if(bUse!==aUse)return bUse-aUse;const lookup=p=>{const n=norm(p);return chatOrderMap?.get(n)??chatOrderMap?.get('56'+n)??9999;};return lookup(a.phone)-lookup(b.phone);};const base=recipientTab==='groups'?groups:recipientTab==='lists'?lists:contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast');const icon=recipientTab==='groups'?'👥':recipientTab==='lists'?'📢':'👤';return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,20).map(c=>{const sel=selContacts.some(x=>x.phone===c.phone);return(<div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none',background:sel?'#f0fff4':undefined}} onMouseDown={e=>{e.preventDefault();setSelContacts(p=>sel?p.filter(x=>x.phone!==c.phone):[...p,c]);setSearch('');}}><span style={{fontSize:14,pointerEvents:'none'}}>{sel?'✅':icon}</span><div style={{pointerEvents:'none'}}><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{recipientTab==='contacts'?c.phone:recipientTab==='groups'?'Grupo':'Lista de difusión'}</div></div></div>);});})()}
+            {(()=>{const base=recipientTab==='groups'?groups:recipientTab==='lists'?lists:contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast');const empty=base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0;return empty&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&!groups.length?'Cargando grupos...':recipientTab==='lists'&&!lists.length?'Sin listas de difusión':'Sin resultados'}</div>;})()}
+          </div>
 
           <button style={{...S.btnSm,marginTop:4,marginBottom:8,color:'#1976d2',border:'1px dashed #90caf9',width:'100%',justifyContent:'center',background:'none'}} onClick={()=>setShowManual(v=>!v)}>
             + Número manual
@@ -465,7 +469,7 @@ function App() {
           {showManual&&<div style={{display:'flex',gap:8,marginBottom:10}}>
             <input style={{...S.input,flex:1,margin:0}} placeholder='Nombre' value={manualName} onChange={e=>setManualName(e.target.value)}/>
             <input style={{...S.input,flex:1,margin:0}} placeholder='+56912345678' value={manualPhone} onChange={e=>setManualPhone(e.target.value)}/>
-            <button style={{...S.btn,width:'auto',padding:'0 12px'}} onClick={()=>{if(manualName.trim()&&manualPhone.trim()){const c={id:'m-'+Date.now(),name:manualName.trim(),phone:manualPhone.trim()};setContacts(p=>[...p,c]);setSelContact(c);setSearch(c.name);setManualName('');setManualPhone('');setShowManual(false);}}}>OK</button>
+            <button style={{...S.btn,width:'auto',padding:'0 12px'}} onClick={()=>{if(manualName.trim()&&manualPhone.trim()){const c={id:'m-'+Date.now(),name:manualName.trim(),phone:manualPhone.trim()};setSelContacts(p=>[...p,c]);setManualName('');setManualPhone('');setShowManual(false);}}}>OK</button>
           </div>}
           <label style={S.label}>Mensaje</label>
           <textarea ref={msgRef} style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
@@ -480,17 +484,17 @@ function App() {
               }}>{v}</button>
             ))}
           </div>
-          {msgText.includes('{')&&selContact&&(
+          {msgText.includes('{')&&selContacts.length>0&&(
             <div style={{marginTop:6,padding:'6px 10px',background:'#f8f9fa',borderRadius:8,fontSize:12,color:'#555',borderLeft:'3px solid #25d366'}}>
               <span style={{fontWeight:600,color:'#888',fontSize:11}}>PREVIEW · </span>
-              {msgText.replace(/\{nombre\}/gi,selContact.name).replace(/\{nombre_corto\}/gi,(selContact.name||'').split(' ')[0]).replace(/\{telefono\}/gi,selContact.phone)}
+              {msgText.replace(/\{nombre\}/gi,selContacts[0].name).replace(/\{nombre_corto\}/gi,(selContacts[0].name||'').split(' ')[0]).replace(/\{telefono\}/gi,selContacts[0].phone)}
             </div>
           )}
           <label style={S.label}>Fecha y hora</label>
           <DateTimePicker value={schedAt} onChange={setSchedAt}/>
           <div style={{display:'flex',gap:10,marginTop:12}}>
-            <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>{setShowForm(false);setSelContact(null);setMsgText('');setSchedAt('');setSearch('');setShowManual(false);setManualName('');setManualPhone('');}}>Cancelar</button>
-            <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>{editingMsg?'Guardar cambios':'Programar'}</button>
+            <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>{setShowForm(false);setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setSearch('');setShowManual(false);setManualName('');setManualPhone('');}}>Cancelar</button>
+            <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>{editingMsg?'Guardar cambios':selContacts.length>1?`Programar (${selContacts.length})`:'Programar'}</button>
           </div>
         </div>
       </div>}

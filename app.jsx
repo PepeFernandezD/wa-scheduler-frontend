@@ -208,6 +208,7 @@ function App() {
 
   async function autoImport(tok) {
     try {
+      await new Promise(r => setTimeout(r, 8000));
       const [dataC, dataChats] = await Promise.all([
         api('/wa-contacts', {}, tok),
         api('/wa-chats', {}, tok)

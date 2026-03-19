@@ -248,12 +248,15 @@ function App() {
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
     try{
       if(editingMsg){
-        await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:recipients[0].phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:recipients[0].name})},token);
+        const r=await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:recipients[0].phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:recipients[0].name})},token);
+        if(r.error)throw new Error(r.error);
       } else {
-        await Promise.all(recipients.map(r=>api('/schedule',{method:'POST',body:JSON.stringify({phone:r.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:r.name,fileName:attachment?.name,fileType:attachment?.type,fileData:attachment?.data})},token)));
+        const results=await Promise.all(recipients.map(r=>api('/schedule',{method:'POST',body:JSON.stringify({phone:r.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:r.name,fileName:attachment?.name,fileType:attachment?.type,fileData:attachment?.data})},token)));
+        const failed=results.find(r=>r.error);
+        if(failed)throw new Error(failed.error);
       }
       setShowForm(false);setEditingMsg(null);setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setSearch('');
-    }catch{alert('Error al guardar.');}
+    }catch(e){alert('Error al guardar: '+(e?.message||e));}
   }
 
   async function saveContact(){

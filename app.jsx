@@ -246,6 +246,8 @@ function App() {
     const recipients=selContacts.length?selContacts:(selContact?[selContact]:[]);
     if(!recipients.length||!msgText.trim()||!schedAt)return alert('Completa todos los campos');
     if(new Date(schedAt).getTime()<=Date.now())return alert('Elige una fecha/hora futura');
+    const hasBroadcast=recipients.some(r=>(r.phone||'').endsWith('@broadcast'));
+    if(hasBroadcast)return alert('Las listas de difusión no están soportadas aún. Usa multi-selección de contactos en su lugar.');
     try{
       if(editingMsg){
         const r=await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:recipients[0].phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:recipients[0].name})},token);
@@ -458,7 +460,7 @@ function App() {
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>{editingMsg?'Editar mensaje':'Nuevo mensaje'}</h3>
           <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
-            {[['contacts','👤 Contactos'],['groups','👥 Grupos'],['lists','📢 Listas']].map(([tab,label])=>(
+            {[['contacts','👤 Contactos'],['groups','👥 Grupos']].map(([tab,label])=>(
               <button key={tab} style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:12,background:recipientTab===tab?'#fff':'transparent',color:recipientTab===tab?'#222':'#999',boxShadow:recipientTab===tab?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab(tab);setSearch('');}}>{label}</button>
             ))}
           </div>

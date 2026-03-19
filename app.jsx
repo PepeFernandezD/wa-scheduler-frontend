@@ -129,6 +129,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingMsg, setEditingMsg] = useState(null);
+  const [attachment, setAttachment] = useState(null); // {name, type, data (base64)}
   const [showContacts, setShowContacts] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const [contactSearch, setContactSearch] = useState('');
@@ -231,7 +232,7 @@ function App() {
     setStep(3);
   }
 
-  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setSelContacts([]);setSearchFocused(false);setMsgText('');setSchedAt('');setShowManual(false);const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);const dbLists=contacts.filter(c=>c.source==='whatsapp_broadcast');if(dbLists.length)setLists(dbLists);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const dataL=Array.isArray(data.lists)?data.lists:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length){setGroups([...dataG].sort(byOrder));const existing=new Set(contacts.filter(c=>c.source==='whatsapp_group').map(c=>c.phone));const newGroups=dataG.filter(g=>!existing.has(g.phone));if(newGroups.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newGroups.map(g=>({...g,source:'whatsapp_group'}))})},token).then(()=>api('/contacts',{},token).then(d=>{if(Array.isArray(d))setContacts(d);}));}if(dataL.length){setLists([...dataL].sort(byOrder));const existingL=new Set(contacts.filter(c=>c.source==='whatsapp_broadcast').map(c=>c.phone));const newLists=dataL.filter(l=>!existingL.has(l.phone));if(newLists.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newLists.map(l=>({...l,source:'whatsapp_broadcast'}))})},token);}if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
+  async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setSelContacts([]);setSearchFocused(false);setAttachment(null);setMsgText('');setSchedAt('');setShowManual(false);const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);const dbLists=contacts.filter(c=>c.source==='whatsapp_broadcast');if(dbLists.length)setLists(dbLists);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const dataL=Array.isArray(data.lists)?data.lists:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length){setGroups([...dataG].sort(byOrder));const existing=new Set(contacts.filter(c=>c.source==='whatsapp_group').map(c=>c.phone));const newGroups=dataG.filter(g=>!existing.has(g.phone));if(newGroups.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newGroups.map(g=>({...g,source:'whatsapp_group'}))})},token).then(()=>api('/contacts',{},token).then(d=>{if(Array.isArray(d))setContacts(d);}));}if(dataL.length){setLists([...dataL].sort(byOrder));const existingL=new Set(contacts.filter(c=>c.source==='whatsapp_broadcast').map(c=>c.phone));const newLists=dataL.filter(l=>!existingL.has(l.phone));if(newLists.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newLists.map(l=>({...l,source:'whatsapp_broadcast'}))})},token);}if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
     setEditingMsg(msg);
     setSelContact({name:msg.contactName,phone:msg.phone});
     setSearch(msg.contactName);
@@ -249,7 +250,7 @@ function App() {
       if(editingMsg){
         await api('/messages/'+editingMsg.id,{method:'PATCH',body:JSON.stringify({phone:recipients[0].phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:recipients[0].name})},token);
       } else {
-        await Promise.all(recipients.map(r=>api('/schedule',{method:'POST',body:JSON.stringify({phone:r.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:r.name})},token)));
+        await Promise.all(recipients.map(r=>api('/schedule',{method:'POST',body:JSON.stringify({phone:r.phone,message:msgText.trim(),scheduledAt:new Date(schedAt).toISOString(),contactName:r.name,fileName:attachment?.name,fileType:attachment?.type,fileData:attachment?.data})},token)));
       }
       setShowForm(false);setEditingMsg(null);setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setSearch('');
     }catch{alert('Error al guardar.');}
@@ -474,6 +475,17 @@ function App() {
           </div>}
           <label style={S.label}>Mensaje</label>
           <textarea ref={msgRef} style={{...S.input,height:80,resize:'vertical'}} placeholder='Escribe tu mensaje...' value={msgText} onChange={e=>setMsgText(e.target.value)}/>
+          <div style={{marginTop:6}}>
+            {!attachment&&<label style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:'#1976d2',padding:'5px 10px',borderRadius:8,border:'1px dashed #90caf9',background:'none'}}>
+              📎 Adjuntar imagen o documento
+              <input type='file' accept='image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt' style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(!f)return;if(f.size>8*1024*1024)return alert('Máximo 8MB');const r=new FileReader();r.onload=ev=>{const b64=ev.target.result.split(',')[1];setAttachment({name:f.name,type:f.type,data:b64});};r.readAsDataURL(f);}}/>
+            </label>}
+            {attachment&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'#f0f4ff',borderRadius:8,fontSize:12}}>
+              <span>{attachment.type.startsWith('image/')?'🖼️':'📄'} {attachment.name}</span>
+              <span style={{cursor:'pointer',color:'#e53935',marginLeft:'auto'}} onClick={()=>setAttachment(null)}>✕</span>
+            </div>}
+            {attachment&&attachment.type.startsWith('image/')&&<img src={'data:'+attachment.type+';base64,'+attachment.data} style={{marginTop:6,maxWidth:'100%',maxHeight:120,borderRadius:8,objectFit:'contain'}} alt='preview'/>}
+          </div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
             {['{nombre}','{nombre_corto}','{telefono}'].map(v=>(
               <button key={v} type='button' style={{fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px dashed #25d366',background:'#f0fff4',color:'#1b5e20',cursor:'pointer'}} onClick={()=>{
@@ -494,7 +506,7 @@ function App() {
           <label style={S.label}>Fecha y hora</label>
           <DateTimePicker value={schedAt} onChange={setSchedAt}/>
           <div style={{display:'flex',gap:10,marginTop:12}}>
-            <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>{setShowForm(false);setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setSearch('');setShowManual(false);setManualName('');setManualPhone('');}}>Cancelar</button>
+            <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1}} onClick={()=>{setShowForm(false);setSelContact(null);setSelContacts([]);setMsgText('');setSchedAt('');setSearch('');setShowManual(false);setManualName('');setManualPhone('');setAttachment(null);}}>Cancelar</button>
             <button style={{...S.btn,flex:2}} onClick={scheduleMsg}>{editingMsg?'Guardar cambios':selContacts.length>1?`Programar (${selContacts.length})`:'Programar'}</button>
           </div>
         </div>

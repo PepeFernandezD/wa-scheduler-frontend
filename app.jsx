@@ -384,7 +384,7 @@ function App() {
               <div><div style={{fontWeight:600,fontSize:14}}>{m.contactName||m.phone}</div><div style={{fontSize:11,color:'#aaa'}}>{m.phone}</div></div>
               <div style={S.badge}>{countdown(new Date(m.scheduledAt).getTime())}</div>
             </div>
-            <div style={{fontSize:13,color:'#555',marginTop:10,background:'#fafafa',borderRadius:8,padding:'8px 12px',borderLeft:'3px solid #25d366'}}>"{m.message}"</div>
+            <div style={{fontSize:13,color:'#555',marginTop:10,background:'#fafafa',borderRadius:8,padding:'8px 12px',borderLeft:'3px solid #25d366'}}>"{m.message}"{m.fileName&&<span style={{fontSize:11,color:'#888',marginLeft:8}}>{m.fileType?.startsWith('image/')?'🖼️':'📎'}{m.fileName}</span>}</div>
             <div style={{display:'flex',justifyContent:'space-between',marginTop:10}}>
               <div style={{fontSize:11,color:'#bbb'}}>{fmt(m.scheduledAt)}</div>
               <div style={{display:'flex',gap:6}}>
@@ -402,6 +402,7 @@ function App() {
               <div style={{fontSize:11,color:m.status==='error'?'#e53935':'#aaa'}}>{m.status==='error'?'❌ Error':'✅ Enviado'} · {fmt(m.scheduledAt)}</div>
             </div>
             <div style={{fontSize:12,color:'#888',marginTop:4}}>{m.message?.slice(0,80)}</div>
+            {m.fileName&&<div style={{fontSize:11,color:'#555',marginTop:4,display:'flex',alignItems:'center',gap:4}}>{m.fileType?.startsWith('image/')?'🖼️':'📎'} {m.fileName}</div>}
             {m.status==='error'&&m.error&&<div style={{fontSize:11,color:'#e53935',marginTop:4,background:'#fff0f0',borderRadius:6,padding:'4px 8px'}}>{m.error}</div>}
           </div>)}
         </section>}

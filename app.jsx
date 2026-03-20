@@ -153,9 +153,6 @@ function App() {
   const [expandedListId, setExpandedListId] = useState(null);
   const [expandedListContacts, setExpandedListContacts] = useState([]);
   const [listContactSearch, setListContactSearch] = useState('');
-  const [importingBroadcast, setImportingBroadcast] = useState(null);
-  const [waBroadcasts, setWaBroadcasts] = useState([]);
-  const [showImport, setShowImport] = useState(false);
   const [selContacts, setSelContacts] = useState([]);
   const [searchFocused, setSearchFocused] = useState(false);
   const pollRef = useRef(null);
@@ -248,9 +245,7 @@ function App() {
   async function expandList(id){ if(expandedListId===id){setExpandedListId(null);setExpandedListContacts([]);setListContactSearch('');return;} setExpandedListId(id); setListContactSearch(''); const d=await api('/lists/'+id+'/contacts',{},token); setExpandedListContacts(Array.isArray(d)?d:[]); }
   async function removeListContact(listId,contactId){ await api('/lists/'+listId+'/contacts/'+contactId,{method:'DELETE'},token); setExpandedListContacts(p=>p.filter(c=>c.id!==contactId)); loadMyLists(); }
   async function addContactToList(listId, contact){ const already=expandedListContacts.some(c=>c.phone===contact.phone); if(already)return; const r=await api('/lists/'+listId+'/contacts',{method:'POST',body:JSON.stringify({contacts:[{phone:contact.phone,name:contact.name}]})},token); if(!r.error){ const d=await api('/lists/'+listId+'/contacts',{},token); setExpandedListContacts(Array.isArray(d)?d:[]); loadMyLists(); } }
-  async function openImport(){ setShowImport(true); const d=await api('/wa-chats',{},token); setWaBroadcasts(Array.isArray(d.lists)?d.lists:[]); }
-  async function importBroadcast(broadcast){ setImportingBroadcast(broadcast.phone); try{ const members=await api('/wa-broadcast-members/'+encodeURIComponent(broadcast.phone),{},token); if(!Array.isArray(members)||!members.length){setImportingBroadcast(null);return alert('No se pudieron obtener los contactos de esta lista.');} const list=await api('/lists',{method:'POST',body:JSON.stringify({name:broadcast.name})},token); if(list.error){setImportingBroadcast(null);return alert('Error: '+list.error);} await api('/lists/'+list.id+'/contacts',{method:'POST',body:JSON.stringify({contacts:members})},token); loadMyLists(); setShowImport(false); alert('Lista "'+broadcast.name+'" importada con '+members.length+' contactos.'); }catch(e){alert('Error al importar');} setImportingBroadcast(null); }
-  async function selectMyList(listId){ const d=await api('/lists/'+listId+'/contacts',{},token); if(!Array.isArray(d)||!d.length)return alert('Esta lista no tiene contactos.'); setSelContacts(d.map(c=>({name:c.name,phone:c.phone}))); setSearch(''); setSearchFocused(false); }
+async function selectMyList(listId){ const d=await api('/lists/'+listId+'/contacts',{},token); if(!Array.isArray(d)||!d.length)return alert('Esta lista no tiene contactos.'); setSelContacts(d.map(c=>({name:c.name,phone:c.phone}))); setSearch(''); setSearchFocused(false); }
 
   async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setSelContacts([]);setSearchFocused(false);setAttachment(null);setMsgText('');setSchedAt('');setShowManual(false);const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);const dbLists=contacts.filter(c=>c.source==='whatsapp_broadcast');if(dbLists.length)setLists(dbLists);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const dataL=Array.isArray(data.lists)?data.lists:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length){setGroups([...dataG].sort(byOrder));const existing=new Set(contacts.filter(c=>c.source==='whatsapp_group').map(c=>c.phone));const newGroups=dataG.filter(g=>!existing.has(g.phone));if(newGroups.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newGroups.map(g=>({...g,source:'whatsapp_group'}))})},token).then(()=>api('/contacts',{},token).then(d=>{if(Array.isArray(d))setContacts(d);}));}if(dataL.length){setLists([...dataL].sort(byOrder));const existingL=new Set(contacts.filter(c=>c.source==='whatsapp_broadcast').map(c=>c.phone));const newLists=dataL.filter(l=>!existingL.has(l.phone));if(newLists.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newLists.map(l=>({...l,source:'whatsapp_broadcast'}))})},token);}if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
     setEditingMsg(msg);
@@ -483,12 +478,10 @@ function App() {
             <h3 style={{margin:0,fontSize:17}}>📋 Mis Listas ({myLists.length})</h3>
             <button style={S.btnSm} onClick={()=>setShowLists(false)}>✕ Cerrar</button>
           </div>
-          {!showImport&&<>
-          <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
             <input style={{...S.input,flex:1,margin:0}} placeholder='Nueva lista...' value={newListName} onChange={e=>setNewListName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createMyList()}/>
             <button style={S.btnP} onClick={createMyList}>Crear</button>
           </div>
-          <button style={{...S.btnSm,marginBottom:12,justifyContent:'center',border:'1px dashed #25d366',color:'#25d366',background:'none',width:'100%'}} onClick={openImport}>⬇ Importar desde WhatsApp</button>
           <div style={{overflowY:'auto',flex:1}}>
             {myLists.map(l=>(
               <div key={l.id} style={{borderBottom:'1px solid #f0f0f0',marginBottom:2}}>
@@ -521,20 +514,6 @@ function App() {
             ))}
             {myLists.length===0&&<div style={{textAlign:'center',padding:40,color:'#bbb'}}>Crea tu primera lista arriba</div>}
           </div>
-          </>}
-          {showImport&&<>
-            <button style={{...S.btnSm,marginBottom:12,alignSelf:'flex-start'}} onClick={()=>setShowImport(false)}>← Volver</button>
-            <div style={{fontWeight:600,fontSize:14,marginBottom:8}}>Listas de difusión de WhatsApp</div>
-            {waBroadcasts.length===0&&<div style={{color:'#aaa',fontSize:13,marginBottom:8}}>Cargando listas...</div>}
-            {waBroadcasts.map(b=>(
-              <div key={b.phone} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #f5f5f5'}}>
-                <div style={{fontWeight:500,fontSize:14}}>📢 {b.name}</div>
-                <button style={{...S.btnP,fontSize:12,padding:'6px 12px',opacity:importingBroadcast===b.phone?0.5:1}} disabled={!!importingBroadcast} onClick={()=>importBroadcast(b)}>
-                  {importingBroadcast===b.phone?'Importando...':'Importar'}
-                </button>
-              </div>
-            ))}
-          </>}
         </div>
       </div>}
 

@@ -147,6 +147,14 @@ function App() {
   const [lists, setLists] = useState([]);
   const [chatOrderMap, setChatOrderMap] = useState(null);
   const [recipientTab, setRecipientTab] = useState('contacts');
+  const [myLists, setMyLists] = useState([]);
+  const [showLists, setShowLists] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [expandedListId, setExpandedListId] = useState(null);
+  const [expandedListContacts, setExpandedListContacts] = useState([]);
+  const [waBroadcasts, setWaBroadcasts] = useState([]);
+  const [importingBroadcast, setImportingBroadcast] = useState(null);
+  const [showImport, setShowImport] = useState(false);
   const [selContacts, setSelContacts] = useState([]);
   const [searchFocused, setSearchFocused] = useState(false);
   const pollRef = useRef(null);
@@ -173,6 +181,7 @@ function App() {
   useEffect(()=>{
     if(!token) return;
     api('/contacts',{},token).then(d=>{ if(Array.isArray(d) && d.length>=0) setContacts(d); });
+    api('/lists',{},token).then(d=>{ if(Array.isArray(d)) setMyLists(d); });
   },[token]);
 
   useEffect(()=>{
@@ -231,6 +240,15 @@ function App() {
     } catch(e) { console.error('autoImport error:', e); }
     setStep(3);
   }
+
+  async function loadMyLists(){ const d=await api('/lists',{},token); if(Array.isArray(d)) setMyLists(d); }
+  async function createMyList(){ if(!newListName.trim())return; const d=await api('/lists',{method:'POST',body:JSON.stringify({name:newListName.trim()})},token); if(!d.error){setNewListName('');loadMyLists();} }
+  async function deleteMyList(id){ if(!confirm('¿Eliminar esta lista?'))return; await api('/lists/'+id,{method:'DELETE'},token); loadMyLists(); if(expandedListId===id){setExpandedListId(null);setExpandedListContacts([]);} }
+  async function expandList(id){ if(expandedListId===id){setExpandedListId(null);setExpandedListContacts([]);return;} setExpandedListId(id); const d=await api('/lists/'+id+'/contacts',{},token); setExpandedListContacts(Array.isArray(d)?d:[]); }
+  async function removeListContact(listId,contactId){ await api('/lists/'+listId+'/contacts/'+contactId,{method:'DELETE'},token); setExpandedListContacts(p=>p.filter(c=>c.id!==contactId)); loadMyLists(); }
+  async function openImport(){ setShowImport(true); const d=await api('/wa-chats',{},token); setWaBroadcasts(Array.isArray(d.lists)?d.lists:[]); }
+  async function importBroadcast(broadcast){ setImportingBroadcast(broadcast.phone); try{ const members=await api('/wa-broadcast-members/'+encodeURIComponent(broadcast.phone),{},token); if(members.error)return alert('Error: '+members.error); const list=await api('/lists',{method:'POST',body:JSON.stringify({name:broadcast.name})},token); if(list.error)return alert('Error: '+list.error); if(members.length){ await api('/lists/'+list.id+'/contacts',{method:'POST',body:JSON.stringify({contacts:members})},token); } loadMyLists(); setShowImport(false); alert('Lista "'+broadcast.name+'" importada con '+members.length+' contactos.'); }catch(e){alert('Error al importar');} setImportingBroadcast(null); }
+  async function selectMyList(listId){ const d=await api('/lists/'+listId+'/contacts',{},token); if(!Array.isArray(d)||!d.length)return alert('Esta lista no tiene contactos.'); setSelContacts(d.map(c=>({name:c.name,phone:c.phone}))); setSearch(''); setSearchFocused(false); }
 
   async function openNewForm(){setShowForm(true);setRecipientTab('contacts');setSearch('');setSelContact(null);setSelContacts([]);setSearchFocused(false);setAttachment(null);setMsgText('');setSchedAt('');setShowManual(false);const dbGroups=contacts.filter(c=>c.source==='whatsapp_group');if(dbGroups.length)setGroups(dbGroups);const dbLists=contacts.filter(c=>c.source==='whatsapp_broadcast');if(dbLists.length)setLists(dbLists);try{const data=await api('/wa-chats',{},token);const norm=p=>p?p.replace(/\D/g,''):'';const normId=id=>id?id.split('@')[0].replace(/\D/g,''):'';const oArr=Array.isArray(data.order)?data.order:[];const dataG=Array.isArray(data.groups)?data.groups:[];const dataL=Array.isArray(data.lists)?data.lists:[];const oMap=new Map();oArr.forEach((id,i)=>{const full=normId(id);oMap.set(full,i);if(full.startsWith('56')&&full.length===11)oMap.set(full.slice(2),i);});setChatOrderMap(oMap);const lookup=p=>{const n=norm(p);return oMap.get(n)??oMap.get('56'+n)??9999;};const byOrder=(a,b)=>lookup(a.phone)-lookup(b.phone);if(dataG.length){setGroups([...dataG].sort(byOrder));const existing=new Set(contacts.filter(c=>c.source==='whatsapp_group').map(c=>c.phone));const newGroups=dataG.filter(g=>!existing.has(g.phone));if(newGroups.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newGroups.map(g=>({...g,source:'whatsapp_group'}))})},token).then(()=>api('/contacts',{},token).then(d=>{if(Array.isArray(d))setContacts(d);}));}if(dataL.length){setLists([...dataL].sort(byOrder));const existingL=new Set(contacts.filter(c=>c.source==='whatsapp_broadcast').map(c=>c.phone));const newLists=dataL.filter(l=>!existingL.has(l.phone));if(newLists.length)api('/contacts/bulk',{method:'POST',body:JSON.stringify({contacts:newLists.map(l=>({...l,source:'whatsapp_broadcast'}))})},token);}if(oArr.length)setContacts(prev=>[...prev].sort(byOrder));}catch(e){console.error('openNewForm:',e);}} function openEditForm(msg){
     setEditingMsg(msg);
@@ -350,6 +368,7 @@ function App() {
           </div>
         </div>
         <div style={{display:'flex',gap:8}}>
+          <button style={{...S.btnSm,fontSize:13,padding:'7px 12px'}} onClick={()=>{setShowLists(true);setExpandedListId(null);setExpandedListContacts([]);setShowImport(false);setNewListName('');}}>📋 Listas</button>
           <button style={{...S.btnSm,fontSize:13,padding:'7px 12px'}} onClick={()=>{setShowContacts(true);setContactSearch('');setEditingContact(null);}}>👥 Contactos</button>
           <button style={S.btnP} onClick={openNewForm}>+ Nuevo</button>
         </div>
@@ -456,19 +475,79 @@ function App() {
         </div>
       </div>}
 
+      {showLists&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowLists(false)}>
+        <div style={{...S.modal,maxHeight:'85vh',display:'flex',flexDirection:'column'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <h3 style={{margin:0,fontSize:17}}>📋 Mis Listas ({myLists.length})</h3>
+            <button style={S.btnSm} onClick={()=>setShowLists(false)}>✕ Cerrar</button>
+          </div>
+          {!showImport&&<>
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              <input style={{...S.input,flex:1,margin:0}} placeholder='Nueva lista...' value={newListName} onChange={e=>setNewListName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createMyList()}/>
+              <button style={{...S.btnP}} onClick={createMyList}>Crear</button>
+            </div>
+            <button style={{...S.btnSm,marginBottom:12,justifyContent:'center',border:'1px dashed #25d366',color:'#25d366',background:'none'}} onClick={openImport}>⬇ Importar desde WhatsApp</button>
+            <div style={{overflowY:'auto',flex:1}}>
+              {myLists.map(l=>(
+                <div key={l.id} style={{borderBottom:'1px solid #f5f5f5'}}>
+                  <div style={{padding:'10px 4px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div style={{cursor:'pointer'}} onClick={()=>expandList(l.id)}>
+                      <div style={{fontWeight:600,fontSize:14}}>{l.name}</div>
+                      <div style={{fontSize:12,color:'#888'}}>{l.count} contactos {expandedListId===l.id?'▲':'▼'}</div>
+                    </div>
+                    <button style={{...S.btnSm,color:'#e53935'}} onClick={()=>deleteMyList(l.id)}>Borrar</button>
+                  </div>
+                  {expandedListId===l.id&&<div style={{paddingBottom:8,paddingLeft:4}}>
+                    {expandedListContacts.map(c=>(
+                      <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderTop:'1px solid #f9f9f9'}}>
+                        <div><div style={{fontSize:13,fontWeight:500}}>{c.name}</div><div style={{fontSize:11,color:'#aaa'}}>{c.phone}</div></div>
+                        <button style={{...S.btnSm,color:'#e53935',fontSize:11}} onClick={()=>removeListContact(l.id,c.id)}>✕</button>
+                      </div>
+                    ))}
+                    {expandedListContacts.length===0&&<div style={{fontSize:12,color:'#aaa',padding:'4px 0'}}>Sin contactos</div>}
+                  </div>}
+                </div>
+              ))}
+              {myLists.length===0&&<div style={{textAlign:'center',padding:40,color:'#bbb'}}>Sin listas aún</div>}
+            </div>
+          </>}
+          {showImport&&<>
+            <button style={{...S.btnSm,marginBottom:12,alignSelf:'flex-start'}} onClick={()=>setShowImport(false)}>← Volver</button>
+            <div style={{fontWeight:600,fontSize:14,marginBottom:8}}>Listas de difusión de WhatsApp</div>
+            {waBroadcasts.length===0&&<div style={{color:'#aaa',fontSize:13}}>Cargando listas...</div>}
+            {waBroadcasts.map(b=>(
+              <div key={b.phone} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #f5f5f5'}}>
+                <div><div style={{fontWeight:500,fontSize:14}}>📢 {b.name}</div></div>
+                <button style={{...S.btnP,fontSize:12,padding:'6px 12px',opacity:importingBroadcast===b.phone?0.5:1}} disabled={!!importingBroadcast} onClick={()=>importBroadcast(b)}>
+                  {importingBroadcast===b.phone?'Importando...':'Importar'}
+                </button>
+              </div>
+            ))}
+            {waBroadcasts.length===0&&<div style={{fontSize:12,color:'#aaa',marginTop:8}}>Si no aparecen listas, ábrelas primero en WhatsApp Web.</div>}
+          </>}
+        </div>
+      </div>}
+
       {showForm&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowForm(false),setEditingMsg(null),setSelContact(null),setSelContacts([]),setMsgText(''),setSchedAt(''),setSearch(''),setShowManual(false),setManualName(''),setManualPhone(''))}>
         <div style={S.modal}>
           <h3 style={{margin:'0 0 16px',fontSize:17}}>{editingMsg?'Editar mensaje':'Nuevo mensaje'}</h3>
           <div style={{display:'flex',gap:0,marginBottom:10,background:'#f5f5f5',borderRadius:10,padding:3}}>
-            {[['contacts','👤 Contactos'],['groups','👥 Grupos']].map(([tab,label])=>(
+            {[['contacts','👤 Contactos'],['groups','👥 Grupos'],['mylists','📋 Mis Listas']].map(([tab,label])=>(
               <button key={tab} style={{flex:1,padding:'7px 0',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,fontSize:12,background:recipientTab===tab?'#fff':'transparent',color:recipientTab===tab?'#222':'#999',boxShadow:recipientTab===tab?'0 1px 4px rgba(0,0,0,.08)':'none'}} onClick={()=>{setRecipientTab(tab);setSearch('');}}>{label}</button>
             ))}
           </div>
           {selContacts.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>{selContacts.map(c=><span key={c.phone} style={{background:'#e8f5e9',color:'#1b5e20',fontSize:12,fontWeight:600,padding:'4px 10px',borderRadius:20,display:'flex',alignItems:'center',gap:4}}>{c.name}<span style={{cursor:'pointer',fontWeight:400,marginLeft:2}} onMouseDown={e=>{e.preventDefault();setSelContacts(p=>p.filter(x=>x.phone!==c.phone));}}>✕</span></span>)}</div>}
           <input style={S.input} placeholder={recipientTab==='groups'?'Buscar grupo...':recipientTab==='lists'?'Buscar lista...':'Buscar contacto...'} value={search} onChange={e=>setSearch(e.target.value)} onFocus={()=>setSearchFocused(true)} onBlur={()=>setSearchFocused(false)}/>
           <div style={{...S.contactList,display:searchFocused?'block':'none'}}>
-            {(()=>{const norm=p=>p?p.replace(/\D/g,''):'';const usageCount=new Map();messages.forEach(m=>{const k=norm(m.phone);usageCount.set(k,(usageCount.get(k)||0)+1);});const byOrder=(a,b)=>{const aUse=usageCount.get(norm(a.phone))||0;const bUse=usageCount.get(norm(b.phone))||0;if(bUse!==aUse)return bUse-aUse;const lookup=p=>{const n=norm(p);return chatOrderMap?.get(n)??chatOrderMap?.get('56'+n)??9999;};return lookup(a.phone)-lookup(b.phone);};const base=recipientTab==='groups'?groups:recipientTab==='lists'?lists:contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast');const icon=recipientTab==='groups'?'👥':recipientTab==='lists'?'📢':'👤';return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,20).map(c=>{const sel=selContacts.some(x=>x.phone===c.phone);return(<div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none',background:sel?'#f0fff4':undefined}} onMouseDown={e=>{e.preventDefault();setSelContacts(p=>sel?p.filter(x=>x.phone!==c.phone):[...p,c]);setSearch('');}}><span style={{fontSize:14,pointerEvents:'none'}}>{sel?'✅':icon}</span><div style={{pointerEvents:'none'}}><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{recipientTab==='contacts'?c.phone:recipientTab==='groups'?'Grupo':'Lista de difusión'}</div></div></div>);});})()}
-            {(()=>{const base=recipientTab==='groups'?groups:recipientTab==='lists'?lists:contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast');const empty=base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0;return empty&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&!groups.length?'Cargando grupos...':recipientTab==='lists'&&!lists.length?'Sin listas de difusión':'Sin resultados'}</div>;})()}
+            {recipientTab==='mylists'
+              ? myLists.filter(l=>l.name.toLowerCase().includes(search.toLowerCase())).map(l=>(
+                  <div key={l.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none'}} onMouseDown={e=>{e.preventDefault();selectMyList(l.id);setSearchFocused(false);}}>
+                    <span style={{fontSize:14}}>📋</span>
+                    <div><div style={{fontWeight:500,fontSize:13}}>{l.name}</div><div style={{fontSize:11,color:'#888'}}>{l.count} contactos</div></div>
+                  </div>
+                ))
+              : (()=>{const norm=p=>p?p.replace(/\D/g,''):'';const usageCount=new Map();messages.forEach(m=>{const k=norm(m.phone);usageCount.set(k,(usageCount.get(k)||0)+1);});const byOrder=(a,b)=>{const aUse=usageCount.get(norm(a.phone))||0;const bUse=usageCount.get(norm(b.phone))||0;if(bUse!==aUse)return bUse-aUse;const lookup=p=>{const n=norm(p);return chatOrderMap?.get(n)??chatOrderMap?.get('56'+n)??9999;};return lookup(a.phone)-lookup(b.phone);};const base=recipientTab==='groups'?groups:contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast');const icon=recipientTab==='groups'?'👥':'👤';return base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).sort(byOrder).slice(0,20).map(c=>{const sel=selContacts.some(x=>x.phone===c.phone);return(<div key={c.phone||c.id} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',alignItems:'center',gap:8,userSelect:'none',background:sel?'#f0fff4':undefined}} onMouseDown={e=>{e.preventDefault();setSelContacts(p=>sel?p.filter(x=>x.phone!==c.phone):[...p,c]);setSearch('');}}><span style={{fontSize:14,pointerEvents:'none'}}>{sel?'✅':icon}</span><div style={{pointerEvents:'none'}}><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{recipientTab==='contacts'?c.phone:'Grupo'}</div></div></div>);});})()}
+            {(()=>{if(recipientTab==='mylists'){return myLists.filter(l=>l.name.toLowerCase().includes(search.toLowerCase())).length===0&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>Sin listas — créalas en el botón 📋 Listas</div>;}const base=recipientTab==='groups'?groups:contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast');const empty=base.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search)).length===0;return empty&&<div style={{padding:'10px 14px',fontSize:13,color:'#aaa'}}>{recipientTab==='groups'&&!groups.length?'Cargando grupos...':'Sin resultados'}</div>;})()}
           </div>
 
           <button style={{...S.btnSm,marginTop:4,marginBottom:8,color:'#1976d2',border:'1px dashed #90caf9',width:'100%',justifyContent:'center',background:'none'}} onClick={()=>setShowManual(v=>!v)}>

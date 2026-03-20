@@ -149,10 +149,13 @@ function App() {
   const [recipientTab, setRecipientTab] = useState('contacts');
   const [myLists, setMyLists] = useState([]);
   const [showLists, setShowLists] = useState(false);
+  const [creatingList, setCreatingList] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [expandedListId, setExpandedListId] = useState(null);
   const [expandedListContacts, setExpandedListContacts] = useState([]);
   const [listContactSearch, setListContactSearch] = useState('');
+  const [editingListId, setEditingListId] = useState(null);
+  const [editingListName, setEditingListName] = useState('');
   const [selContacts, setSelContacts] = useState([]);
   const [searchFocused, setSearchFocused] = useState(false);
   const pollRef = useRef(null);
@@ -240,7 +243,8 @@ function App() {
   }
 
   async function loadMyLists(){ const d=await api('/lists',{},token); if(Array.isArray(d)) setMyLists(d); }
-  async function createMyList(){ if(!newListName.trim())return; const d=await api('/lists',{method:'POST',body:JSON.stringify({name:newListName.trim()})},token); if(d.error){alert('Error al crear lista: '+d.error);return;} setNewListName(''); loadMyLists(); }
+  async function createMyList(){ if(!newListName.trim())return; const d=await api('/lists',{method:'POST',body:JSON.stringify({name:newListName.trim()})},token); if(d.error){alert('Error al crear lista: '+d.error);return;} setNewListName(''); setCreatingList(false); setExpandedListId(d.id); setExpandedListContacts([]); loadMyLists(); }
+  async function saveListName(id){ if(!editingListName.trim())return; const d=await api('/lists/'+id,{method:'PATCH',body:JSON.stringify({name:editingListName.trim()})},token); if(d.error){alert('Error: '+d.error);return;} setEditingListId(null); loadMyLists(); }
   async function deleteMyList(id){ if(!confirm('¿Eliminar esta lista?'))return; await api('/lists/'+id,{method:'DELETE'},token); loadMyLists(); if(expandedListId===id){setExpandedListId(null);setExpandedListContacts([]);} }
   async function expandList(id){ if(expandedListId===id){setExpandedListId(null);setExpandedListContacts([]);setListContactSearch('');return;} setExpandedListId(id); setListContactSearch(''); const d=await api('/lists/'+id+'/contacts',{},token); setExpandedListContacts(Array.isArray(d)?d:[]); }
   async function removeListContact(listId,contactId){ await api('/lists/'+listId+'/contacts/'+contactId,{method:'DELETE'},token); setExpandedListContacts(p=>p.filter(c=>c.id!==contactId)); loadMyLists(); }
@@ -472,47 +476,83 @@ async function selectMyList(listId){ const d=await api('/lists/'+listId+'/contac
         </div>
       </div>}
 
-      {showLists&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowLists(false)}>
-        <div style={{...S.modal,maxHeight:'85vh',display:'flex',flexDirection:'column'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-            <h3 style={{margin:0,fontSize:17}}>📋 Mis Listas ({myLists.length})</h3>
-            <button style={S.btnSm} onClick={()=>setShowLists(false)}>✕ Cerrar</button>
+      {showLists&&<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&(setShowLists(false),setCreatingList(false),setEditingListId(null))}>
+        <div style={{...S.modal,maxHeight:'88vh',display:'flex',flexDirection:'column',padding:'20px 16px 28px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{width:36,height:36,borderRadius:'50%',background:'#25d366',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='18' height='18' viewBox='0 0 24 24' fill='white'><path d='M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z'/></svg></div>
+              <h3 style={{margin:0,fontSize:17,fontWeight:700}}>Mis Listas</h3>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              {!creatingList&&<button style={{...S.btnP,fontSize:12,padding:'7px 12px'}} onClick={()=>{setCreatingList(true);setNewListName('');setEditingListId(null);}}>+ Nueva lista</button>}
+              <button style={S.btnSm} onClick={()=>{setShowLists(false);setCreatingList(false);setEditingListId(null);}}>✕</button>
+            </div>
           </div>
-          <div style={{display:'flex',gap:8,marginBottom:12}}>
-            <input style={{...S.input,flex:1,margin:0}} placeholder='Nueva lista...' value={newListName} onChange={e=>setNewListName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createMyList()}/>
-            <button style={S.btnP} onClick={createMyList}>Crear</button>
-          </div>
+
+          {creatingList&&<div style={{background:'#f0fff4',border:'1.5px solid #b2dfdb',borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#1b5e20',marginBottom:10}}>Nueva lista</div>
+            <input style={{...S.input,marginBottom:8}} placeholder='Nombre de la lista...' value={newListName} onChange={e=>setNewListName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createMyList()} autoFocus/>
+            <div style={{display:'flex',gap:8}}>
+              <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1,padding:10,fontSize:13}} onClick={()=>{setCreatingList(false);setNewListName('');}}>Cancelar</button>
+              <button style={{...S.btn,flex:2,padding:10,fontSize:13}} onClick={createMyList}>Crear lista</button>
+            </div>
+          </div>}
+
           <div style={{overflowY:'auto',flex:1}}>
+            {myLists.length===0&&!creatingList&&<div style={{textAlign:'center',padding:'40px 20px',color:'#bbb'}}>
+              <div style={{fontSize:36,marginBottom:8}}>📋</div>
+              <div style={{fontWeight:600}}>Sin listas aún</div>
+              <div style={{fontSize:13,marginTop:4}}>Crea tu primera lista arriba</div>
+            </div>}
             {myLists.map(l=>(
-              <div key={l.id} style={{borderBottom:'1px solid #f0f0f0',marginBottom:2}}>
-                <div style={{padding:'10px 4px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div style={{cursor:'pointer',flex:1}} onClick={()=>expandList(l.id)}>
-                    <div style={{fontWeight:600,fontSize:14}}>{l.name}</div>
+              <div key={l.id} style={{borderBottom:'1px solid #f0f0f0'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px'}}>
+                  <div style={{width:42,height:42,borderRadius:'50%',background:'#128c7e',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:17,flexShrink:0}}>
+                    {l.name[0]?.toUpperCase()}
+                  </div>
+                  <div style={{flex:1,cursor:'pointer',minWidth:0}} onClick={()=>expandList(l.id)}>
+                    <div style={{fontWeight:600,fontSize:14,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l.name}</div>
                     <div style={{fontSize:12,color:'#888'}}>{l.count} contactos {expandedListId===l.id?'▲':'▼'}</div>
                   </div>
-                  <button style={{...S.btnSm,color:'#e53935'}} onClick={()=>deleteMyList(l.id)}>Borrar</button>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    <button style={{...S.btnSm,color:'#1976d2'}} onClick={()=>{setEditingListId(l.id);setEditingListName(l.name);setExpandedListId(null);}}>Editar</button>
+                    <button style={{...S.btnSm,color:'#e53935'}} onClick={()=>deleteMyList(l.id)}>Borrar</button>
+                  </div>
                 </div>
-                {expandedListId===l.id&&<div style={{paddingBottom:10,paddingLeft:4}}>
+
+                {editingListId===l.id&&<div style={{background:'#f8f9fa',borderRadius:10,padding:10,marginBottom:8,marginLeft:52}}>
+                  <input style={{...S.input,marginBottom:8,fontSize:13}} value={editingListName} onChange={e=>setEditingListName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveListName(l.id)} autoFocus/>
+                  <div style={{display:'flex',gap:8}}>
+                    <button style={{...S.btn,background:'#f0f0f0',color:'#555',flex:1,padding:8,fontSize:12}} onClick={()=>setEditingListId(null)}>Cancelar</button>
+                    <button style={{...S.btn,flex:2,padding:8,fontSize:12}} onClick={()=>saveListName(l.id)}>Guardar</button>
+                  </div>
+                </div>}
+
+                {expandedListId===l.id&&<div style={{paddingBottom:12,paddingLeft:52}}>
                   <input style={{...S.input,marginBottom:6,fontSize:12}} placeholder='Buscar contacto para agregar...' value={listContactSearch} onChange={e=>setListContactSearch(e.target.value)}/>
-                  {listContactSearch.length>0&&<div style={{...S.contactList,marginBottom:8,maxHeight:120}}>
+                  {listContactSearch.length>0&&<div style={{...S.contactList,marginBottom:8,maxHeight:140}}>
                     {contacts.filter(c=>c.source!=='whatsapp_group'&&c.source!=='whatsapp_broadcast'&&(c.name.toLowerCase().includes(listContactSearch.toLowerCase())||c.phone.includes(listContactSearch))).slice(0,8).map(c=>(
-                      <div key={c.id} style={{padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',justifyContent:'space-between',alignItems:'center'}} onClick={()=>{addContactToList(l.id,c);setListContactSearch('');}}>
+                      <div key={c.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',display:'flex',justifyContent:'space-between',alignItems:'center'}} onClick={()=>{addContactToList(l.id,c);setListContactSearch('');}}>
                         <div><div style={{fontSize:13,fontWeight:500}}>{c.name}</div><div style={{fontSize:11,color:'#888'}}>{c.phone}</div></div>
-                        <span style={{color:'#25d366',fontSize:12,fontWeight:600}}>+ Agregar</span>
+                        <span style={{color:'#25d366',fontSize:12,fontWeight:700}}>+ Agregar</span>
                       </div>
                     ))}
                   </div>}
-                  {expandedListContacts.map(c=>(
-                    <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderTop:'1px solid #f9f9f9'}}>
-                      <div><div style={{fontSize:13,fontWeight:500}}>{c.name}</div><div style={{fontSize:11,color:'#aaa'}}>{c.phone}</div></div>
-                      <button style={{...S.btnSm,color:'#e53935',fontSize:11}} onClick={()=>removeListContact(l.id,c.id)}>✕</button>
-                    </div>
-                  ))}
-                  {expandedListContacts.length===0&&!listContactSearch&&<div style={{fontSize:12,color:'#aaa',padding:'4px 0'}}>Busca contactos arriba para agregarlos</div>}
+                  {expandedListContacts.length>0&&<div style={{marginTop:4}}>
+                    {expandedListContacts.map(c=>(
+                      <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderTop:'1px solid #f5f5f5'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <div style={{width:28,height:28,borderRadius:'50%',background:'#e8f5e9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#25d366'}}>{c.name[0]?.toUpperCase()}</div>
+                          <div><div style={{fontSize:13,fontWeight:500}}>{c.name}</div><div style={{fontSize:11,color:'#aaa'}}>{c.phone}</div></div>
+                        </div>
+                        <button style={{...S.btnSm,color:'#e53935',fontSize:11,padding:'4px 8px'}} onClick={()=>removeListContact(l.id,c.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>}
+                  {expandedListContacts.length===0&&!listContactSearch&&<div style={{fontSize:12,color:'#aaa',padding:'6px 0'}}>Busca contactos arriba para agregarlos</div>}
                 </div>}
               </div>
             ))}
-            {myLists.length===0&&<div style={{textAlign:'center',padding:40,color:'#bbb'}}>Crea tu primera lista arriba</div>}
           </div>
         </div>
       </div>}
